@@ -3,6 +3,7 @@ import { fetchExtendedHistory } from "./benchmark-history";
 import type { MetricSeries } from "./stats";
 import type { XCredentials } from "../store";
 import type { CampaignRow, DashboardPayload } from "@/app/accounts/[accountId]/types";
+import type { Actor } from "../auth/actor";
 
 /**
  * Builds the benchmark, reaching past the window only when the window cannot carry the comparison.
@@ -16,12 +17,12 @@ export async function buildBenchmarkWithLookback(options: {
   credentials: XCredentials;
   accountId: string;
   asUser: string | null;
-  auditHandle: string | null;
+  actor: Actor;
   dashboard: DashboardPayload & { rawSeries?: Record<string, MetricSeries> };
   campaign: CampaignRow;
   windowDays: number;
 }): Promise<Benchmark> {
-  const { credentials, accountId, asUser, auditHandle, dashboard, campaign, windowDays } = options;
+  const { credentials, accountId, asUser, actor, dashboard, campaign, windowDays } = options;
   const rawSeries = dashboard.rawSeries ?? {};
 
   const recent = buildBenchmark({ campaign, history: dashboard.campaigns, rawSeries, windowDays });
@@ -42,7 +43,7 @@ export async function buildBenchmarkWithLookback(options: {
     credentials,
     accountId,
     asUser,
-    auditHandle,
+    actor,
     timeZone: dashboard.account.timezone,
     objective: campaign.objective,
     coveredDays: windowDays,

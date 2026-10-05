@@ -1,6 +1,7 @@
 import { fetchSegmentedStats, MAX_SEGMENTED_DAYS, StatsJobError } from "@/lib/x/async-stats";
 import { emptySeries, totalsFrom, type MetricSeries, type Totals } from "@/lib/x/stats";
 import type { XCredentials } from "@/lib/store";
+import type { Actor } from "../auth/actor";
 
 /**
  * A breakdown of one campaign by platform.
@@ -149,7 +150,7 @@ export async function buildPlatformBreakdown(options: {
   takeover: boolean;
   /** Fetched by the caller from the synchronous endpoint, which the platform job cannot supply. */
   spotlight?: SpotlightSplit | null;
-  auditHandle: string | null;
+  actor: Actor;
 }): Promise<SegmentBreakdown> {
   const base: Omit<SegmentBreakdown, "status"> = {
     dimension: "PLATFORMS",
@@ -190,7 +191,7 @@ export async function buildPlatformBreakdown(options: {
       endTime: options.endTime,
       metricGroups: SEGMENTED_METRIC_GROUPS,
       segmentationType: "PLATFORMS",
-      auditHandle: options.auditHandle,
+      actor: options.actor,
     });
   } catch (error) {
     // A breakdown is an extra, so a failed job degrades the panel rather than the drawer.

@@ -11,6 +11,7 @@ import {
 } from "./stats";
 import { buildRange, microsToCurrency } from "./time";
 import type { XCredentials } from "../store";
+import type { Actor } from "../auth/actor";
 import type {
   CampaignDetailPayload,
   LineItemRow,
@@ -79,7 +80,7 @@ export async function buildCampaignDetail(options: {
   asUser: string | null;
   days: number;
   timezone: string;
-  auditHandle: string | null;
+  actor: Actor;
   /** Previews are iframes for the browser to mount; the AI path has no use for them. */
   includePreviews?: boolean;
 }): Promise<CampaignDetailPayload> {
@@ -90,11 +91,11 @@ export async function buildCampaignDetail(options: {
     asUser,
     days,
     timezone,
-    auditHandle,
+    actor,
     includePreviews = true,
   } = options;
 
-  const audit = { handle: auditHandle, accountId };
+  const audit = { actor, accountId };
   const warnings: string[] = [];
   const range = buildRange(days, timezone);
 
@@ -166,7 +167,7 @@ export async function buildCampaignDetail(options: {
     entityIds: lineItemIds,
     range,
     metricGroups,
-    auditHandle,
+    actor,
   });
 
   const lineItemStats = stats.series;
@@ -226,7 +227,7 @@ export async function buildCampaignDetail(options: {
     entityIds: promotedTweets.map((tweet) => tweet.id),
     range,
     metricGroups,
-    auditHandle,
+    actor,
   });
   if (creativeStats.failedRequests > 0) {
     warnings.push("Some creative figures are incomplete.");
@@ -313,7 +314,7 @@ async function fetchPreviews(options: {
   tweetIds: string[];
   credentials: XCredentials;
   asUser: string | null;
-  audit: { handle: string | null; accountId: string | null };
+  audit: { actor: Actor; accountId: string | null };
 }): Promise<Map<string, string>> {
   const { accountId, tweetIds, credentials, asUser, audit } = options;
   const previews = new Map<string, string>();

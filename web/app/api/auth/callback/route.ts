@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { resolveConsumerCredentials, saveUserTokens, takePendingRequestToken } from "@/lib/store";
+import { consumerCredentials, saveUser, takePendingRequestToken } from "@/lib/store";
+import { checkHandle, denialMessage } from "@/lib/auth/allowlist";
+import { startSession } from "@/lib/auth/session";
 import { exchangeVerifier, fetchProfile } from "@/lib/x/auth";
 import { appUrl } from "@/lib/x/origin";
 
@@ -10,7 +12,7 @@ function fail(message: string) {
   return NextResponse.redirect(appUrl(`/setup?error=${encodeURIComponent(message)}`));
 }
 
-/** Leg three: exchange the verifier for the rep's own access token. */
+/** Leg three: exchange the verifier for this rep's own access token, then sign them in. */
 export async function GET(request: Request) {
   const url = new URL(request.url);
 
@@ -24,11 +26,11 @@ export async function GET(request: Request) {
     return fail("X did not return a verifier. Start the connection again.");
   }
 
-  const consumer = resolveConsumerCredentials();
-  if (!consumer) return fail("Consumer keys are missing. Re-enter them and retry.");
+  const consumer = await consumerCredentials();
+  if (!consumer) return fail("This deployment has no X app credentials configured.");
 
   // Also guards against a replayed callback, since the pending token is consumed here.
-  const pending = takePendingRequestToken(requestToken);
+  const pending = await takePendingRequestToken(requestToken);
   if (!pending) {
     return fail("This authorization link is stale. Start the connection again.");
   }
@@ -48,14 +50,28 @@ export async function GET(request: Request) {
       accessTokenSecret: result.accessTokenSecret,
     });
 
-    saveUserTokens({
+    const handle = result.handle || profile.handle || "";
+
+    /**
+     * Checked before anything is written. Someone who is not on the list leaves no token in the
+     * database and no session cookie, so a refused sign-in cannot leave behind credentials that a
+     * later change to the list would quietly activate.
+     */
+    const decision = checkHandle(handle);
+    if (!decision.allowed) {
+      return fail(denialMessage(decision.reason, handle));
+    }
+
+    await saveUser({
+      userId: result.userId,
+      handle,
       accessToken: result.accessToken,
       accessTokenSecret: result.accessTokenSecret,
-      handle: result.handle || profile.handle || "",
-      userId: result.userId,
       displayName: profile.displayName,
       avatarUrl: profile.avatarUrl,
     });
+
+    await startSession(result.userId);
 
     return NextResponse.redirect(appUrl("/accounts"));
   } catch (error) {

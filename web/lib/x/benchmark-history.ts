@@ -4,6 +4,7 @@ import { fetchEntityTotals, MAX_ASYNC_DAYS, StatsJobError } from "./async-stats"
 import { addSeries, emptySeries, metricGroupsFor, totalSeriesFrom, type MetricSeries } from "./stats";
 import { buildRangeBetween, localDate } from "./time";
 import type { XCredentials } from "../store";
+import type { Actor } from "../auth/actor";
 
 /**
  * History older than the dashboard's 90-day window, fetched only when the recent window has too
@@ -89,7 +90,7 @@ export async function fetchExtendedHistory(options: {
   credentials: XCredentials;
   accountId: string;
   asUser: string | null;
-  auditHandle: string | null;
+  actor: Actor;
   timeZone: string;
   /** Only campaigns on this objective are worth fetching; it is what the cohort is defined by. */
   objective: string;
@@ -103,7 +104,7 @@ export async function fetchExtendedHistory(options: {
     credentials,
     accountId,
     asUser,
-    auditHandle,
+    actor,
     timeZone,
     objective,
     coveredDays,
@@ -111,7 +112,7 @@ export async function fetchExtendedHistory(options: {
     excludeIds,
   } = options;
 
-  const audit = { handle: auditHandle, accountId };
+  const audit = { actor, accountId };
   const fromDate = localDate(lookbackDays, timeZone);
   // The dashboard's window starts at `coveredDays` back, so the older period ends the day before.
   const toDate = localDate(coveredDays + 1, timeZone);
@@ -233,7 +234,7 @@ export async function fetchExtendedHistory(options: {
           credentials,
           accountId,
           asUser,
-          auditHandle,
+          actor,
           entity: "CAMPAIGN",
           entityIds: chunk,
           startTime: window.startTime,

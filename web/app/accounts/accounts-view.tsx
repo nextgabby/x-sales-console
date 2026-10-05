@@ -42,6 +42,8 @@ type AccountsPayload = {
   groups: AccountGroup[];
   /** Set by a demo deployment, where nothing is stored and nothing can be changed. */
   demo?: boolean;
+  /** Set by the shared hosted deployment, where signing out matters. */
+  hosted?: boolean;
 };
 
 /** Shared across every card so the cap is global, not per component. */
@@ -110,7 +112,7 @@ export function AccountsView() {
 
   if (notConnected) {
     return (
-      <Shell handle={null} demo={false}>
+      <Shell handle={null} demo={false} hosted={false}>
         <Callout tone="warn">
           Your stored authorization is no longer valid.{" "}
           <a className="font-semibold underline" href="/setup">
@@ -123,7 +125,11 @@ export function AccountsView() {
   }
 
   return (
-    <Shell handle={data?.handle ?? null} demo={Boolean(data?.demo)}>
+    <Shell
+      handle={data?.handle ?? null}
+      demo={Boolean(data?.demo)}
+      hosted={Boolean(data?.hosted)}
+    >
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Advertiser accounts</h1>
@@ -278,13 +284,40 @@ function AccountGroupSection({
   );
 }
 
+function SignOutButton() {
+  const [signingOut, setSigningOut] = useState(false);
+
+  return (
+    <button
+      type="button"
+      disabled={signingOut}
+      onClick={async () => {
+        setSigningOut(true);
+        await fetch("/api/auth/disconnect", { method: "POST" });
+        /**
+         * A full page load, not a router push. Every cached query, and anything else still in
+         * memory, belongs to the rep who just signed out; a client-side navigation would keep it
+         * all and hand it to whoever signs in next on the same machine.
+         */
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+        window.location.href = "/setup";
+      }}
+      className="rounded-full px-3 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-surface hover:text-ink disabled:opacity-50"
+    >
+      {signingOut ? "Signing out…" : "Sign out"}
+    </button>
+  );
+}
+
 function Shell({
   handle,
   demo,
+  hosted,
   children,
 }: {
   handle: string | null;
   demo: boolean;
+  hosted: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -310,6 +343,8 @@ function Shell({
                 Settings
               </a>
             )}
+            {/* On a shared deployment, leaving a session open on a borrowed laptop is the risk. */}
+            {hosted ? <SignOutButton /> : null}
           </div>
         </div>
       </header>

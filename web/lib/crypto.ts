@@ -11,12 +11,40 @@ const IV_LENGTH = 12;
 let cachedKey: Buffer | null = null;
 
 /**
- * The master key lives in a 0600 file next to the encrypted data rather than in a
- * passphrase the rep types on every start. That protects a copied data directory but
- * not a compromised machine account, which is the documented limit of this design.
+ * Hosted deployments must supply the key here. A container filesystem does not survive a redeploy,
+ * so the generated file below would be replaced by a fresh key on every deploy and every stored
+ * token would become permanently undecryptable — reps silently logged out, with a corrupt-secret
+ * error as the only clue. Generate one with `openssl rand -base64 32`.
+ *
+ * Changing it has the same effect as losing it: everyone re-authorizes. It is the one secret in the
+ * deployment that cannot be rotated casually.
+ */
+function envKey(): Buffer | null {
+  const raw = process.env.ENCRYPTION_KEY?.trim();
+  if (!raw) return null;
+
+  const key = Buffer.from(raw, "base64");
+  if (key.length !== 32) {
+    throw new Error(
+      "ENCRYPTION_KEY must be 32 bytes, base64 encoded. Generate one with `openssl rand -base64 32`.",
+    );
+  }
+  return key;
+}
+
+/**
+ * Falls back to a 0600 file next to the encrypted data rather than a passphrase the rep types on
+ * every start. That protects a copied data directory but not a compromised machine account, which
+ * is the documented limit of this design — and the reason the hosted path uses the environment.
  */
 function loadMasterKey(): Buffer {
   if (cachedKey) return cachedKey;
+
+  const fromEnv = envKey();
+  if (fromEnv) {
+    cachedKey = fromEnv;
+    return fromEnv;
+  }
 
   mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
 

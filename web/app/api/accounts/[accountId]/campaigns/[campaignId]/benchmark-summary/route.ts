@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { normalizeHandle, readConnection, resolveAiKey, resolveCredentials } from "@/lib/store";
+import { normalizeHandle, resolveAiKey } from "@/lib/store";
 import { AdsApiError } from "@/lib/x/ads-client";
 import { buildBenchmarkWithLookback } from "@/lib/x/benchmark-build";
 import { buildBenchmarkPrompt } from "@/lib/x/benchmark-context";
 import { AccountNotFoundError, buildDashboard } from "@/lib/x/dashboard";
 import { GrokError, streamChat } from "@/lib/grok";
+import { currentSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -15,12 +16,13 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ accountId: string; campaignId: string }> },
 ) {
-  const credentials = resolveCredentials();
-  if (!credentials) {
+  const session = await currentSession();
+  if (!session) {
     return NextResponse.json({ error: "not-connected" }, { status: 401 });
   }
+  const credentials = session.credentials;
 
-  const ai = resolveAiKey();
+  const ai = await resolveAiKey(session.userId);
   if (!ai) {
     return NextResponse.json({ error: "no-ai-key" }, { status: 400 });
   }
@@ -39,7 +41,7 @@ export async function POST(
       accountId,
       asUser: body.asUser ? normalizeHandle(body.asUser) : null,
       days: WINDOW_DAYS,
-      auditHandle: readConnection()?.handle ?? null,
+      actor: session.actor,
       includeRawSeries: true,
       skipComparisons: true,
       // Present only so a takeover is refused by name; cohorts exclude them either way.
@@ -68,7 +70,7 @@ export async function POST(
       credentials,
       accountId,
       asUser: body.asUser ? normalizeHandle(body.asUser) : null,
-      auditHandle: readConnection()?.handle ?? null,
+      actor: session.actor,
       dashboard,
       campaign,
       windowDays: WINDOW_DAYS,

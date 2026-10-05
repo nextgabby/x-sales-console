@@ -1,6 +1,7 @@
 import { adsRequest, AdsApiError, chunkEntityIds } from "./ads-client";
 import { microsToCurrency, type DateRange } from "./time";
 import type { XCredentials } from "../store";
+import type { Actor } from "../auth/actor";
 
 /** Raw metric names we read out of the API response. */
 const RAW_METRICS = [
@@ -151,7 +152,7 @@ export async function fetchDailyStats(options: {
    * cannot be added without double counting.
    */
   placement?: "ALL_ON_TWITTER" | "SPOTLIGHT" | "TREND";
-  auditHandle: string | null;
+  actor: Actor;
 }): Promise<DailyStatsResult> {
   const { range } = options;
   const result: Record<string, MetricSeries> = {};
@@ -191,7 +192,7 @@ export async function fetchDailyStats(options: {
         path: `/stats/accounts/${options.accountId}`,
         credentials: options.credentials,
         asUser: options.asUser,
-        audit: { handle: options.auditHandle, accountId: options.accountId },
+        audit: { actor: options.actor, accountId: options.accountId },
         query: {
           entity: options.entity,
           entity_ids: chunk.join(","),

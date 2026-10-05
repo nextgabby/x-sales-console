@@ -1,6 +1,7 @@
 import { adsRequest, adsRequestAll, AdsApiError, chunkEntityIds } from "./ads-client";
 import { microsToCurrency, recentDayRange } from "./time";
 import type { XCredentials } from "../store";
+import type { Actor } from "../auth/actor";
 
 export type AdsAccount = {
   id: string;
@@ -151,12 +152,12 @@ function toRef(account: AdsAccount, access: AccessMode, asUser: string | null): 
  */
 export async function listDirectAccounts(
   credentials: XCredentials,
-  handle: string | null,
+  actor: Actor,
 ): Promise<AccountRef[]> {
   const accounts = await adsRequestAll<AdsAccount>({
     path: "/accounts",
     credentials,
-    audit: { handle, accountId: null },
+    audit: { actor, accountId: null },
   });
   return accounts
     .filter((account) => !account.deleted)
@@ -171,13 +172,13 @@ export async function listDirectAccounts(
 export async function listSpyAccounts(
   credentials: XCredentials,
   asUser: string,
-  handle: string | null,
+  actor: Actor,
 ): Promise<AccountRef[]> {
   const accounts = await adsRequestAll<AdsAccount>({
     path: "/accounts",
     credentials,
     asUser,
-    audit: { handle, accountId: null },
+    audit: { actor, accountId: null },
   });
   return accounts
     .filter((account) => !account.deleted)
@@ -195,14 +196,14 @@ export async function verifySpyAccess(
   credentials: XCredentials,
   accountId: string,
   asUser: string,
-  handle: string | null,
+  actor: Actor,
 ): Promise<{ ok: true; account: AdsAccount } | { ok: false; reason: string }> {
   try {
     await adsRequest({
       path: `/accounts/${accountId}/campaigns`,
       credentials,
       asUser,
-      audit: { handle, accountId },
+      audit: { actor, accountId },
       query: { count: 1 },
     });
   } catch (error) {
@@ -223,7 +224,7 @@ export async function verifySpyAccess(
       path: `/accounts/${accountId}`,
       credentials,
       asUser,
-      audit: { handle, accountId },
+      audit: { actor, accountId },
     });
     if (!detail.data) return { ok: false, reason: `${accountId} returned no account data.` };
     return { ok: true, account: detail.data };
@@ -285,7 +286,7 @@ type ActiveEntity = { entity_id: string };
 async function fetchSpendSparkline(
   credentials: XCredentials,
   account: AccountRef,
-  handle: string | null,
+  actor: Actor,
   warnings: string[],
   describedCampaigns: Promise<Campaign[] | null>,
 ): Promise<number[]> {
@@ -297,7 +298,7 @@ async function fetchSpendSparkline(
       path: `/stats/accounts/${account.id}/active_entities`,
       credentials,
       asUser: account.asUser,
-      audit: { handle, accountId: account.id },
+      audit: { actor, accountId: account.id },
       query: {
         entity: "CAMPAIGN",
         start_time: range.startTime,
@@ -343,7 +344,7 @@ async function fetchSpendSparkline(
         path: `/stats/accounts/${account.id}`,
         credentials,
         asUser: account.asUser,
-        audit: { handle, accountId: account.id },
+        audit: { actor, accountId: account.id },
         query: {
           entity: "CAMPAIGN",
           entity_ids: chunk.join(","),
@@ -371,7 +372,7 @@ async function fetchSpendSparkline(
 export async function buildAccountSummary(
   credentials: XCredentials,
   account: AccountRef,
-  handle: string | null,
+  actor: Actor,
 ): Promise<AccountSummary> {
   const warnings: string[] = [];
   const asUser = account.asUser;
@@ -383,7 +384,7 @@ export async function buildAccountSummary(
       path: `/accounts/${account.id}/campaigns`,
       credentials,
       asUser,
-      audit: { handle, accountId: account.id },
+      audit: { actor, accountId: account.id },
       query: { with_deleted: true },
     }),
   );
@@ -395,7 +396,7 @@ export async function buildAccountSummary(
           path: `/accounts/${account.id}/promotable_users`,
           credentials,
           asUser,
-          audit: { handle, accountId: account.id },
+          audit: { actor, accountId: account.id },
         }),
       ),
       attempt("Permissions", warnings, () =>
@@ -403,7 +404,7 @@ export async function buildAccountSummary(
           path: `/accounts/${account.id}/authenticated_user_access`,
           credentials,
           asUser,
-          audit: { handle, accountId: account.id },
+          audit: { actor, accountId: account.id },
         }),
       ),
       attempt("Funding", warnings, () =>
@@ -411,11 +412,11 @@ export async function buildAccountSummary(
           path: `/accounts/${account.id}/funding_instruments`,
           credentials,
           asUser,
-          audit: { handle, accountId: account.id },
+          audit: { actor, accountId: account.id },
         }),
       ),
       campaignsPromise,
-      fetchSpendSparkline(credentials, account, handle, warnings, campaignsPromise),
+      fetchSpendSparkline(credentials, account, actor, warnings, campaignsPromise),
     ]);
 
   const primaryFunding = fundingInstruments?.[0];

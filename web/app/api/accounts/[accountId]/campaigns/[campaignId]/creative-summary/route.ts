@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { normalizeHandle, readConnection, resolveAiKey, resolveCredentials } from "@/lib/store";
+import { normalizeHandle, resolveAiKey } from "@/lib/store";
 import { AdsApiError } from "@/lib/x/ads-client";
 import { buildCampaignDetail, CampaignNotFoundError } from "@/lib/x/campaign-detail";
 import { normalizeDays } from "@/lib/x/dashboard";
 import { buildCreativePrompt } from "@/lib/x/creative-context";
 import { GrokError, streamChat } from "@/lib/grok";
+import { currentSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +14,13 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ accountId: string; campaignId: string }> },
 ) {
-  const credentials = resolveCredentials();
-  if (!credentials) {
+  const session = await currentSession();
+  if (!session) {
     return NextResponse.json({ error: "not-connected" }, { status: 401 });
   }
+  const credentials = session.credentials;
 
-  const ai = resolveAiKey();
+  const ai = await resolveAiKey(session.userId);
   if (!ai) {
     return NextResponse.json({ error: "no-ai-key" }, { status: 400 });
   }
@@ -44,7 +46,7 @@ export async function POST(
       asUser: body.asUser ? normalizeHandle(body.asUser) : null,
       days: normalizeDays(body.days),
       timezone: body.timezone || "UTC",
-      auditHandle: readConnection()?.handle ?? null,
+      actor: session.actor,
       includePreviews: false,
     });
 

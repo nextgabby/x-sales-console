@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { normalizeHandle, readConnection, resolveAiKey, resolveCredentials } from "@/lib/store";
+import { normalizeHandle, resolveAiKey } from "@/lib/store";
 import { AdsApiError } from "@/lib/x/ads-client";
 import { AccountNotFoundError, buildDashboard, normalizeDays } from "@/lib/x/dashboard";
 import { GrokError, streamChat } from "@/lib/grok";
 import { buildComparePrompt } from "@/lib/x/summary-context";
 import { MAX_COMPARE } from "@/app/accounts/[accountId]/metrics";
+import { currentSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +14,13 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ accountId: string }> },
 ) {
-  const credentials = resolveCredentials();
-  if (!credentials) {
+  const session = await currentSession();
+  if (!session) {
     return NextResponse.json({ error: "not-connected" }, { status: 401 });
   }
+  const credentials = session.credentials;
 
-  const ai = resolveAiKey();
+  const ai = await resolveAiKey(session.userId);
   if (!ai) {
     return NextResponse.json({ error: "no-ai-key" }, { status: 400 });
   }
@@ -51,7 +53,7 @@ export async function POST(
       accountId,
       asUser: body.asUser ? normalizeHandle(body.asUser) : null,
       days: normalizeDays(body.days),
-      auditHandle: readConnection()?.handle ?? null,
+      actor: session.actor,
       // Mirrors the view: a takeover can only be summarised if the rep asked to see it.
       includeTakeovers: Boolean(body.takeovers),
     });

@@ -590,9 +590,11 @@ Even local-first, this reads other companies' advertising data, so a few things 
 
 - **Read-only.** No campaign writes. Writes belong on the official Ads MCP where advertiser approval
   flows exist, and staying read-only removes a whole category of risk.
-- **Local audit log** of every advertiser data access: which account, which endpoint, when. Viewable
-  in the app, and the foundation for the optional central telemetry sink later.
-- Encrypted token storage, passphrase-derived key, no secrets in the client bundle.
+- **Audit log** of every advertiser data access: which rep, which account, which endpoint, when.
+  Keyed to the signed-in user id, not just a handle, so it survives a rename and can be joined back
+  to the token that signed the request.
+- Encrypted token storage, no secrets in the client bundle. The key comes from `ENCRYPTION_KEY` when
+  hosted and from `master.key` beside the data locally.
 - Any `x-as-user` impersonation is logged distinctly and shown in the UI while active, so it is never
   ambiguous whose identity a request used.
 - The setup wizard states plainly that the rep is pasting their own keys and that those keys never
@@ -815,9 +817,10 @@ x.com.
 1. **Central attribution** — do you need a dashboard showing which rep pulled which advertiser's
    data? If yes, plan for the telemetry sink in Phase 5, or reconsider hosting now.
 2. **Grok data clearance** — sign-off on advertiser performance data reaching the xAI API.
-3. **Do reps already have developer apps?** If most of sales does not, the setup wizard is the
-   riskiest part of adoption and may need a walkthrough with screenshots, or a rethink toward a
-   team-owned app that is explicitly not yours.
+3. ~~**Do reps already have developer apps?**~~ Settled by the hosted build (§12): it uses one
+   team-owned app, so a rep signs in with nothing but their X account and the setup wizard
+   disappears entirely. The launcher still uses the rep's own app, where pasting keys is reasonable
+   because they also control the callback URL.
 4. **Vertical benchmarks — parked pending input from sales.** Asked for after the account-history
    benchmark shipped: "something more centralized, able to filter by vertical and campaign
    objective", to replace the tooling lost in the adstack migration and the hand-kept spreadsheet
@@ -844,16 +847,54 @@ x.com.
    and `fetchEntityTotals` makes the sweep affordable — 90-day totals for a 112-campaign account are
    about 15 requests against the ~260 a daily-series build needs, so a 25-account sweep is feasible
    with caching where it would not have been before.
-5. **A real hosted deployment, if the demo makes the case for one.** The demo link below is for
-   feedback on the product, not for work: it shows generated advertisers. Running the real thing for
-   more than one person is not a hosting change but a feature the app does not have — there is no
-   session layer anywhere, so a shared deployment would give everyone one shared connection, and a
-   password on the link authenticates the link rather than the person, which cannot satisfy the
-   attribution requirement in §2. The real version needs per-user sessions, per-user encrypted
-   credentials, and an audit log keyed to the signed-in rep. Until then the local launcher is the
-   only correct way to use it against live accounts.
+## 12. The shared hosted deployment
 
-## 12. Demo mode
+Built after the demo, when the decision changed from "a scrubbed link for feedback" to "the real
+thing, restricted to known handles". It is the same app: `DATABASE_URL` is the only switch, and
+unset it is still the single-user local tool described everywhere above.
+
+What had to exist first, none of which was a hosting change:
+
+- **A session layer.** The app began with one stored connection per machine, which on a shared
+  deployment would have signed everyone in as the same person — one rep's token reading another
+  rep's advertisers, and the audit trail naming the wrong individual. Identity now comes from a
+  signed cookie carrying only the X user id. The handle is read from storage rather than the cookie,
+  so a rename cannot leave a stale name in an audit row.
+- **Per-user storage.** One interface, two backends: Postgres when hosted, per-user directories
+  under `DATA_DIR` otherwise. Everything is keyed by the rep's user id even in local mode, so
+  nothing above that layer branches on deployment.
+- **Attribution as a first-class value.** `auditHandle: string | null` became an `Actor` threaded
+  through every fetch, because a handle alone cannot be joined back to the record whose token signed
+  the request. Audit rows deliberately do not cascade on user deletion: who looked at which
+  advertiser has to outlive their access.
+- **A migration.** Anyone already using the local tool had a connection, advertisers and favourites
+  in the flat pre-sessions layout. Without carrying those over, upgrading would have looked exactly
+  like data loss.
+
+Two decisions worth recording, both of which cut against the original per-rep instinct in §2:
+
+- **The developer app is team-owned.** OAuth returns to one fixed callback URL, and that URL must be
+  registered inside the app whose consumer key is used. Per-rep keys would therefore mean every rep
+  registering the hosted callback in their own app before they could log in, and again whenever the
+  URL changed — the §11.3 adoption risk, made worse. Sharing the app costs nothing in attribution:
+  each rep still completes their own OAuth, holds their own user token, and sees only the advertisers
+  granted to them personally.
+- **`ENCRYPTION_KEY` moved to the environment.** Locally the key is generated into `master.key`
+  beside the data. On an ephemeral filesystem that file is regenerated on every deploy, which would
+  have silently made every stored token undecryptable — a failure that would have looked like X
+  revoking everyone's access.
+
+Access is an `ALLOWED_HANDLES` list, re-checked on every request against the stored handle rather
+than trusted from the cookie, so removing someone takes effect on their next click. An empty list
+denies everyone: a half-configured deployment locks itself rather than opening itself.
+
+Verified by three scripts, each against a production build with the Ads API pointed at a dead port:
+`verify-hosted.sh` (19 assertions — two reps isolated, a valid cookie for an unlisted handle still
+refused, forged cookies rejected, no local fallback when hosted), `verify-local.sh` (19 — the
+migration preserves tokens, advertisers and favourites, and the cookie-free single-user path still
+works), and `verify-demo.sh` (27).
+
+## 13. Demo mode
 
 Built, so the console can go behind a public link and be reviewed without advertiser data on the
 internet. `DEMO_MODE=1` makes `adsRequest` return from `lib/demo/api.ts` before it builds a URL, so

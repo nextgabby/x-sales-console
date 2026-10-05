@@ -1,5 +1,6 @@
 import { buildOAuth1AuthorizationHeader } from "./oauth1";
 import { recordAudit, type XCredentials } from "../store";
+import { ANONYMOUS_ACTOR, type Actor } from "../auth/actor";
 import { demoAdsRequest } from "../demo/api";
 import { isDemoMode } from "../demo/mode";
 
@@ -23,7 +24,7 @@ export type AdsRequestOptions = {
    */
   asUser?: string | null;
   /** Audit context only; does not affect the request. */
-  audit?: { handle: string | null; accountId: string | null };
+  audit?: { actor: Actor; accountId: string | null };
 };
 
 export class AdsApiError extends Error {
@@ -91,6 +92,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export async function adsRequest<T = unknown>(options: AdsRequestOptions): Promise<T> {
   const asUser = options.asUser?.trim().replace(/^@/, "") || null;
   const method = options.method ?? "GET";
+  const actor = options.audit?.actor ?? ANONYMOUS_ACTOR;
 
   /**
    * The only exit from demo mode, placed before the URL is even built so there is no path by which
@@ -132,7 +134,8 @@ export async function adsRequest<T = unknown>(options: AdsRequestOptions): Promi
     if (response.ok) {
       recordAudit({
         at: new Date().toISOString(),
-        handle: options.audit?.handle ?? null,
+        userId: actor.userId,
+        handle: actor.handle,
         accountId: options.audit?.accountId ?? null,
         path: options.path,
         asUser,
@@ -153,7 +156,8 @@ export async function adsRequest<T = unknown>(options: AdsRequestOptions): Promi
 
     recordAudit({
       at: new Date().toISOString(),
-      handle: options.audit?.handle ?? null,
+      userId: actor.userId,
+      handle: actor.handle,
       accountId: options.audit?.accountId ?? null,
       path: options.path,
       asUser,

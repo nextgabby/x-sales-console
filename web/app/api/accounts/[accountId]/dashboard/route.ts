@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 
-import { normalizeHandle, readConnection, resolveCredentials } from "@/lib/store";
+import { normalizeHandle } from "@/lib/store";
 import { AdsApiError } from "@/lib/x/ads-client";
 import {
   AccountNotFoundError,
   buildDashboard,
   normalizeDays,
 } from "@/lib/x/dashboard";
+import { currentSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +15,11 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ accountId: string }> },
 ) {
-  const credentials = resolveCredentials();
-  if (!credentials) {
+  const session = await currentSession();
+  if (!session) {
     return NextResponse.json({ error: "not-connected" }, { status: 401 });
   }
+  const credentials = session.credentials;
 
   const { accountId } = await params;
   const url = new URL(request.url);
@@ -29,7 +31,7 @@ export async function GET(
       accountId,
       asUser: asUserParam ? normalizeHandle(asUserParam) : null,
       days: normalizeDays(url.searchParams.get("days")),
-      auditHandle: readConnection()?.handle ?? null,
+      actor: session.actor,
       includeTakeovers: url.searchParams.get("takeovers") === "1",
     });
     return NextResponse.json(payload);

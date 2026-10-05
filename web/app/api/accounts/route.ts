@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 
-import {
-  readConnection,
-  readFavorites,
-  readSpyGrants,
-  resolveCredentials,
-} from "@/lib/store";
+import { readFavorites, readSpyGrants } from "@/lib/store";
 import { AdsApiError } from "@/lib/x/ads-client";
 import { grantToRef, listDirectAccounts, type AccountRef } from "@/lib/x/accounts";
 import { isDemoMode } from "@/lib/demo/mode";
+import { isHosted } from "@/lib/db";
+import { currentSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -25,19 +22,19 @@ export type AccountGroup = {
  * route so a rep with dozens of accounts still gets an instant page.
  */
 export async function GET() {
-  const credentials = resolveCredentials();
-  if (!credentials) {
+  const session = await currentSession();
+  if (!session) {
     return NextResponse.json({ error: "not-connected" }, { status: 401 });
   }
+  const credentials = session.credentials;
 
-  const handle = readConnection()?.handle ?? null;
   const groups: AccountGroup[] = [];
 
   try {
     groups.push({
       source: "direct",
       asUser: null,
-      accounts: await listDirectAccounts(credentials, handle),
+      accounts: await listDirectAccounts(credentials, session.actor),
       error: null,
     });
   } catch (error) {
@@ -52,7 +49,7 @@ export async function GET() {
     });
   }
 
-  const grants = readSpyGrants();
+  const grants = await readSpyGrants(session.userId);
   const byHandle = new Map<string, AccountRef[]>();
   for (const grant of grants) {
     const existing = byHandle.get(grant.asUser) ?? [];
@@ -67,8 +64,8 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    handle,
-    favorites: readFavorites(),
+    handle: session.handle,
+    favorites: await readFavorites(session.userId),
     spyGrants: grants,
     groups,
     /**
@@ -77,5 +74,7 @@ export async function GET() {
      * for the browser to believe it is in a different mode from the server.
      */
     demo: isDemoMode(),
+    /** Shared deployment, so the header offers an explicit way to end the session. */
+    hosted: isHosted(),
   });
 }

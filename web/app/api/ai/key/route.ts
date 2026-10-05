@@ -9,14 +9,21 @@ import {
   saveAiConfig,
   saveAiModel,
 } from "@/lib/store";
+import { currentSession } from "@/lib/auth/session";
+import { isHosted } from "@/lib/db";
 import { GrokError, listModels, pickModel } from "@/lib/grok";
 import { maskSecret } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
 
+const notConnected = () => NextResponse.json({ error: "not-connected" }, { status: 401 });
+
 export async function GET(request: Request) {
+  const session = await currentSession();
+  if (!session) return notConnected();
+
   // Only ever a mask — the key itself must not reach the browser.
-  const status = aiKeyStatus();
+  const status = await aiKeyStatus(session.userId);
   if (!status.configured || !new URL(request.url).searchParams.has("models")) {
     return NextResponse.json(status);
   }
@@ -26,12 +33,15 @@ export async function GET(request: Request) {
    * neither of which involves pasting anything. A failure here is not worth an error — the stored
    * model still works, the list is just unavailable.
    */
-  const resolved = resolveAiKey();
+  const resolved = await resolveAiKey(session.userId);
   const models = resolved ? await listModels(resolved.apiKey).catch(() => []) : [];
   return NextResponse.json({ ...status, models });
 }
 
 export async function POST(request: Request) {
+  const session = await currentSession();
+  if (!session) return notConnected();
+
   const body = (await request.json().catch(() => ({}))) as {
     apiKey?: string;
     model?: string;
@@ -45,10 +55,11 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
-    if (!readAiConfig()?.apiKey && !hasEnvAiKey()) {
+    const stored = await readAiConfig(session.userId);
+    if (!stored?.apiKey && !hasEnvAiKey()) {
       return NextResponse.json({ error: "No xAI key configured yet." }, { status: 400 });
     }
-    const updated = saveAiModel(body.model);
+    const updated = await saveAiModel(session.userId, body.model);
     return NextResponse.json({ configured: true, model: updated.model });
   }
 
@@ -59,8 +70,9 @@ export async function POST(request: Request) {
   if (hasEnvAiKey()) {
     return NextResponse.json(
       {
-        error:
-          "XAI_API_KEY is set in this app's environment and takes precedence. Remove it from .env.local and restart if you want to paste a key here instead.",
+        error: isHosted()
+          ? "This deployment supplies an xAI key through its environment, and that key takes precedence. There is nothing to paste here."
+          : "XAI_API_KEY is set in this app's environment and takes precedence. Remove it from .env.local and restart if you want to paste a key here instead.",
       },
       { status: 409 },
     );
@@ -81,7 +93,7 @@ export async function POST(request: Request) {
     // Validate before storing, so a typo is caught here rather than mid-summary.
     const models = await listModels(apiKey);
     const model = body.model?.trim() || pickModel(models);
-    const saved = saveAiConfig(apiKey, model);
+    const saved = await saveAiConfig(session.userId, apiKey, model);
 
     return NextResponse.json({
       configured: true,
@@ -101,8 +113,11 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  clearAiConfig();
+  const session = await currentSession();
+  if (!session) return notConnected();
+
+  await clearAiConfig(session.userId);
   // The stored key is gone, but an environment key is not ours to remove — say so rather than
   // reporting "not configured" while summaries keep working.
-  return NextResponse.json(aiKeyStatus());
+  return NextResponse.json(await aiKeyStatus(session.userId));
 }

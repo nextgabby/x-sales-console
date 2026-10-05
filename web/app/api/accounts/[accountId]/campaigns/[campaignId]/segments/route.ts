@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { normalizeHandle, readConnection, resolveCredentials } from "@/lib/store";
+import { normalizeHandle } from "@/lib/store";
 import { adsRequest, adsRequestAll, AdsApiError } from "@/lib/x/ads-client";
 import type { Campaign } from "@/lib/x/accounts";
 import { normalizeDays } from "@/lib/x/dashboard";
@@ -8,6 +8,7 @@ import { buildAudience } from "@/lib/x/audience";
 import { buildPlatformBreakdown, type SpotlightSplit } from "@/lib/x/segments";
 import { fetchDailyStats, totalsFrom, type MetricSeries } from "@/lib/x/stats";
 import { buildRange, recentDayRange } from "@/lib/x/time";
+import { currentSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +23,11 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ accountId: string; campaignId: string }> },
 ) {
-  const credentials = resolveCredentials();
-  if (!credentials) {
+  const session = await currentSession();
+  if (!session) {
     return NextResponse.json({ error: "not-connected" }, { status: 401 });
   }
+  const credentials = session.credentials;
 
   const { accountId, campaignId } = await params;
   const url = new URL(request.url);
@@ -33,8 +35,7 @@ export async function GET(
   const asUserHandle = asUser ? normalizeHandle(asUser) : null;
   const days = normalizeDays(url.searchParams.get("days"));
   const timezone = url.searchParams.get("timezone") || "UTC";
-  const auditHandle = readConnection()?.handle ?? null;
-  const audit = { handle: auditHandle, accountId };
+  const audit = { actor: session.actor, accountId };
 
   try {
     /**
@@ -85,7 +86,7 @@ export async function GET(
         entityIds: [campaignId],
         range,
         metricGroups: "ENGAGEMENT,BILLING",
-        auditHandle,
+        actor: session.actor,
       }),
       fetchDailyStats({
         credentials,
@@ -96,7 +97,7 @@ export async function GET(
         range,
         metricGroups: "ENGAGEMENT,BILLING",
         placement: "SPOTLIGHT",
-        auditHandle,
+        actor: session.actor,
       }).catch(() => null),
     ]);
 
@@ -137,7 +138,7 @@ export async function GET(
       endTime: window.endTime,
       days,
       takeover: campaign === null,
-      auditHandle,
+      actor: session.actor,
     };
     const reportedImpressions = totals?.impressions ?? null;
 

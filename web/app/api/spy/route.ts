@@ -3,15 +3,14 @@ import { NextResponse } from "next/server";
 import { parseSpyPaste, type SpyEntry } from "@/lib/handles";
 import {
   normalizeHandle,
-  readConnection,
   readSpyGrants,
   removeSpyGrant,
   removeSpyHandleGroup,
-  resolveCredentials,
   saveSpyGrants,
   type SpyGrant,
 } from "@/lib/store";
 import { listSpyAccounts, verifySpyAccess } from "@/lib/x/accounts";
+import { currentSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +23,11 @@ export type VerifyResult = {
 };
 
 export async function GET() {
-  return NextResponse.json({ spyGrants: readSpyGrants() });
+  const session = await currentSession();
+  if (!session) {
+    return NextResponse.json({ error: "not-connected" }, { status: 401 });
+  }
+  return NextResponse.json({ spyGrants: await readSpyGrants(session.userId) });
 }
 
 /**
@@ -34,10 +37,11 @@ export async function GET() {
  * because a handle alone says nothing about which of its accounts the rep may open.
  */
 export async function POST(request: Request) {
-  const credentials = resolveCredentials();
-  if (!credentials) {
+  const session = await currentSession();
+  if (!session) {
     return NextResponse.json({ error: "not-connected" }, { status: 401 });
   }
+  const credentials = session.credentials;
 
   let payload: { text?: string; entries?: SpyEntry[] };
   try {
@@ -46,7 +50,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Expected a JSON body." }, { status: 400 });
   }
 
-  const auditHandle = readConnection()?.handle ?? null;
   const parsed = parseSpyPaste(payload.text ?? "");
 
   const candidates = new Map<string, SpyEntry>();
@@ -60,7 +63,7 @@ export async function POST(request: Request) {
   const expansionNotes: string[] = [];
   for (const handle of parsed.bareHandles) {
     try {
-      const accounts = await listSpyAccounts(credentials, handle, auditHandle);
+      const accounts = await listSpyAccounts(credentials, handle, session.actor);
       for (const account of accounts) {
         if (!candidates.has(account.id)) {
           candidates.set(account.id, { accountId: account.id, handle });
@@ -93,7 +96,7 @@ export async function POST(request: Request) {
       credentials,
       candidate.accountId,
       candidate.handle,
-      auditHandle,
+      session.actor,
     );
 
     if (!outcome.ok) {
@@ -125,19 +128,31 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({
-    spyGrants: verified.length > 0 ? saveSpyGrants(verified) : readSpyGrants(),
+    spyGrants:
+      verified.length > 0
+        ? await saveSpyGrants(session.userId, verified)
+        : await readSpyGrants(session.userId),
     results,
     notes: expansionNotes,
   });
 }
 
 export async function DELETE(request: Request) {
+  const session = await currentSession();
+  if (!session) {
+    return NextResponse.json({ error: "not-connected" }, { status: 401 });
+  }
+
   const params = new URL(request.url).searchParams;
   const accountId = params.get("accountId");
   const asUser = params.get("asUser");
 
-  if (accountId) return NextResponse.json({ spyGrants: removeSpyGrant(accountId) });
-  if (asUser) return NextResponse.json({ spyGrants: removeSpyHandleGroup(asUser) });
+  if (accountId) {
+    return NextResponse.json({ spyGrants: await removeSpyGrant(session.userId, accountId) });
+  }
+  if (asUser) {
+    return NextResponse.json({ spyGrants: await removeSpyHandleGroup(session.userId, asUser) });
+  }
 
   return NextResponse.json(
     { error: "Provide accountId or asUser." },

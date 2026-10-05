@@ -43,13 +43,20 @@ Everything is written to `~/.x-ads-sales-console/` with `0600` permissions:
 | File | Contents |
 |---|---|
 | `master.key` | Random 32-byte AES-256-GCM key |
-| `connection.json` | Your consumer key and tokens, secrets encrypted |
-| `favorites.json` | Pinned account IDs |
-| `ai.json` | Your xAI API key, encrypted, and the chosen model |
-| `audit.jsonl` | Every advertiser data access: account, endpoint, timestamp |
+| `app-keys.json` | The developer app's consumer key, secret encrypted |
+| `users/<id>/connection.json` | Your tokens, secrets encrypted |
+| `users/<id>/favorites.json` | Pinned account IDs |
+| `users/<id>/spy-handles.json` | The advertisers you have added |
+| `users/<id>/ai.json` | Your xAI API key, encrypted, and the chosen model |
+| `audit.jsonl` | Every advertiser data access: who, account, endpoint, timestamp |
 
 Set `DATA_DIR` to relocate it. **Disconnect** in Settings deletes the stored credentials; revoking
 the app itself happens in your X account settings.
+
+Installations that predate sessions kept one connection flat in `DATA_DIR`. They are moved into the
+layout above automatically on first launch — tokens, advertisers and favourites all carry over, and
+the originals are copied rather than deleted, so nothing is lost if the move gets something wrong.
+A `.migrated` marker stops it happening twice.
 
 The master key sits next to the encrypted data rather than behind a passphrase you retype on every
 launch. That protects a copied data directory, not a compromised machine account.
@@ -66,6 +73,12 @@ launch. That protects a copied data directory, not a compromised machine account
 | `XAI_MODEL` | picked from your key | Pins the Grok model and hides the picker |
 | `DEMO_MODE` | unset | Serves a generated advertiser universe instead of the Ads API. See below |
 | `DEMO_AI` | unset | `live` lets Grok answer for real in demo mode, instead of sample text |
+| `DATABASE_URL` | unset | Set it to run the shared hosted build on Postgres. See below |
+| `ALLOWED_HANDLES` | unset | Hosted only: the handles permitted to sign in |
+| `SESSION_SECRET` | random per process | Hosted only, required: signs the session cookie |
+| `ENCRYPTION_KEY` | `master.key` on disk | Hosted only, required: 32 bytes base64, encrypts stored tokens |
+| `X_CONSUMER_KEY` | from the setup page | The developer app's key. Required when hosted |
+| `X_CONSUMER_SECRET` | from the setup page | The developer app's secret. Required when hosted |
 
 If you run on a different port, set `APP_ORIGIN` to match and register that callback URL too.
 
@@ -78,6 +91,42 @@ XAI_API_KEY=xai-…
 `XAI_API_KEY` takes precedence over a key pasted into the setup page, and the setup page says so —
 a saved key that is being shadowed is flagged rather than left to look active. Restart the dev
 server after changing it, since Next.js reads `.env.local` at boot.
+
+## The shared hosted deployment
+
+Setting `DATABASE_URL` switches the console from the local single-user tool to a shared one that
+several reps sign into. That one variable is the whole switch: storage moves to Postgres, identity
+comes from a signed cookie instead of the single stored connection, and the handle allowlist starts
+being enforced. `render.yaml` deploys it; see the comments there for the secrets it needs.
+
+**One app, many reps.** The consumer keys are team-owned and come from the environment, because
+OAuth returns to one fixed callback URL and that URL has to be registered inside the app the keys
+belong to. Per-rep keys would mean every rep registering the hosted callback in their own developer
+app before they could log in. Nothing is given up by sharing the app: each rep still completes their
+own OAuth and gets their own user token, so what they can open is still decided by the advertiser
+grants they personally hold, and the audit log still names the individual.
+
+**Who gets in.** `ALLOWED_HANDLES` is a comma-separated list, checked at sign-in *and* again on
+every request against the handle stored for that session. Taking someone off the list therefore
+takes effect on their next click rather than whenever their cookie expires. An empty list denies
+everyone, so a half-configured deployment locks itself rather than opening itself.
+
+**`ENCRYPTION_KEY` is not optional here.** Locally the key is generated into `master.key` beside the
+data. A hosted filesystem is ephemeral, so that file would be regenerated on every deploy and every
+token already in the database would become permanently undecryptable. Generate one with
+`openssl rand -base64 32` and keep it somewhere you will not lose it; losing it means everyone
+reauthorizes.
+
+Rotating `SESSION_SECRET` invalidates every cookie, which is the fastest way to sign everyone out.
+
+Three scripts cover the modes, each against a production build with the Ads API pointed at a dead
+port so an escaped call fails loudly:
+
+```
+zsh scripts/verify-hosted.sh   # needs Postgres; two reps, allowlist, forged cookies, isolation
+zsh scripts/verify-local.sh    # single-user mode and the move off the old layout
+zsh scripts/verify-demo.sh     # demo mode
+```
 
 ## Demo mode
 

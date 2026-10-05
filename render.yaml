@@ -1,13 +1,29 @@
-# Render blueprint for the demo deployment only.
+# Render blueprint for the hosted sales console.
 #
-# The link this produces is public and unauthenticated, which is safe for exactly one reason:
-# DEMO_MODE makes the app serve a generated advertiser universe and never call the X Ads API. It
-# holds no credentials, writes nothing to disk, and has no real account behind it. Do not deploy
-# this without DEMO_MODE, and do not add real keys to it — the console is meant to be run locally,
-# where each person signs in as themselves and their own access decides what they can see.
+# This is the real thing, not the demo: it calls the X Ads API with each rep's own OAuth token, so
+# who can get in matters. Three things gate it, and all three have to be set before the first
+# sign-in works.
+#
+#   ALLOWED_HANDLES   The sales handles permitted to sign in. Checked at login *and* on every
+#                     request, so removing someone takes effect on their next click rather than
+#                     whenever their cookie happens to expire. An empty list denies everyone —
+#                     a misconfigured deployment locks itself rather than opening itself.
+#
+#   SESSION_SECRET    Signs the session cookie. Rotating it signs everyone out, which is the
+#                     fastest way to end all sessions at once.
+#
+#   ENCRYPTION_KEY    Encrypts the stored access tokens. It has to live here rather than on disk:
+#                     Render's filesystem is ephemeral, so a generated key file would be replaced
+#                     on every deploy and every token already in the database would become
+#                     permanently undecryptable. Losing this value has the same effect — everyone
+#                     has to reauthorize.
+#
+# Per-rep OAuth tokens are what keep this safe to share. The app's consumer keys are team-owned, so
+# the callback URL is registered once, but each rep authorizes individually and their own advertiser
+# grants decide what they can see. Nobody inherits anyone else's access.
 services:
   - type: web
-    name: x-ads-sales-console-demo
+    name: x-ads-sales-console
     runtime: node
     plan: starter
     region: oregon
@@ -17,11 +33,45 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.11.0
-      - key: DEMO_MODE
-        value: "1"
-      # Unset by default, so Grok answers are fixed sample text and an open URL cannot run up a
-      # bill. Set it to `live` only for a demo you are watching, with a key you can rotate.
-      - key: DEMO_AI
+
+      # Presence of this is what puts the app in hosted multi-rep mode: Postgres-backed, per-user
+      # sessions, allowlist enforced. Unset, it is the local single-user tool.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: x-ads-sales-console-db
+          property: connectionString
+
+      - key: SESSION_SECRET
+        generateValue: true
+
+      # Not generateValue: the app needs exactly 32 bytes, base64. Generate it once with
+      #   openssl rand -base64 32
+      # and keep a copy somewhere you will not lose it.
+      - key: ENCRYPTION_KEY
         sync: false
+
+      # Comma-separated, with or without the @. For example: alice,bob,carol
+      - key: ALLOWED_HANDLES
+        sync: false
+
+      # The team-owned app from console.x.com. Its allowed callback URLs must include
+      # https://<your-service>.onrender.com/api/auth/callback
+      - key: X_CONSUMER_KEY
+        sync: false
+      - key: X_CONSUMER_SECRET
+        sync: false
+
+      # Only needed for a custom domain. Left unset, the app uses RENDER_EXTERNAL_URL, which is
+      # already the right answer for an onrender.com service.
+      - key: APP_ORIGIN
+        sync: false
+
+      # The one shared key, deliberately: reps use Grok without each holding an xAI account.
       - key: XAI_API_KEY
         sync: false
+
+databases:
+  - name: x-ads-sales-console-db
+    plan: basic-256mb
+    region: oregon
+    postgresMajorVersion: "16"

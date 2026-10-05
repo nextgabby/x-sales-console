@@ -4,6 +4,7 @@ import { adsRequest, AdsApiError } from "./ads-client";
 import type { XCredentials } from "../store";
 import { DEMO_JOB_SCHEME, demoStatsJobFile } from "../demo/api";
 import { isDemoMode } from "../demo/mode";
+import type { Actor } from "../auth/actor";
 
 /**
  * The asynchronous analytics endpoints, used here for two things the sync endpoint cannot do.
@@ -99,7 +100,7 @@ type JobOptions = {
   /** Null for a plain total per entity, which is how the longer windows are reached. */
   segmentationType: SegmentationType | null;
   country?: string | null;
-  auditHandle: string | null;
+  actor: Actor;
 };
 
 export async function fetchSegmentedStats(
@@ -138,12 +139,12 @@ async function runStatsJob(options: JobOptions): Promise<SegmentedRow[]> {
     endTime,
     metricGroups,
     segmentationType,
-    auditHandle,
+    actor,
   } = options;
 
   if (entityIds.length === 0) return [];
 
-  const audit = { handle: auditHandle, accountId };
+  const audit = { actor, accountId };
   const geographic = segmentationType != null && COUNTRY_REQUIRED.includes(segmentationType);
   const country = options.country ?? (geographic ? US_COUNTRY_ID : null);
 

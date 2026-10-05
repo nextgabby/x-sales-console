@@ -1,0 +1,30 @@
+# Optional second blueprint: a public demo link, for showing the UI to someone who should not be
+# given access to real advertiser data.
+#
+# `render.yaml` is the real deployment. This one is safe to leave open for exactly one reason:
+# DEMO_MODE makes the app serve a generated advertiser universe and never call the X Ads API. It
+# holds no credentials, stores nothing, and has no real account behind it. Do not deploy this
+# without DEMO_MODE, and do not add real X keys to it.
+#
+# Render reads `render.yaml` by default, so deploying this one means pointing the blueprint at this
+# file explicitly, as a separate service.
+services:
+  - type: web
+    name: x-ads-sales-console-demo
+    runtime: node
+    plan: starter
+    region: oregon
+    rootDir: web
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
+      - key: DEMO_MODE
+        value: "1"
+      # Unset by default, so Grok answers are fixed sample text and an open URL cannot run up a
+      # bill. Set it to `live` only for a demo you are watching, with a key you can rotate.
+      - key: DEMO_AI
+        sync: false
+      - key: XAI_API_KEY
+        sync: false

@@ -1,5 +1,6 @@
 import { fetchSegmentedStats, MAX_SEGMENTED_DAYS, StatsJobError } from "@/lib/x/async-stats";
 import type { XCredentials } from "@/lib/store";
+import type { Actor } from "../auth/actor";
 
 /**
  * Who a campaign actually reached, by age band and by gender.
@@ -78,7 +79,7 @@ type Options = {
   /** Unsegmented impressions for the window, the denominator for every share. */
   reportedImpressions: number | null;
   takeover: boolean;
-  auditHandle: string | null;
+  actor: Actor;
 };
 
 export async function buildAudience(options: Options): Promise<AudienceBreakdown> {
@@ -158,7 +159,7 @@ async function bandsFor(
       endTime: options.endTime,
       metricGroups: "ENGAGEMENT,BILLING",
       segmentationType: dimension,
-      auditHandle: options.auditHandle,
+      actor: options.actor,
     });
   } catch (error) {
     // One dimension failing should not take the other down with it.

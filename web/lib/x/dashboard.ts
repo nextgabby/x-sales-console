@@ -30,6 +30,7 @@ import {
 } from "./pacing";
 import type { XCredentials } from "../store";
 import type { CampaignRow, DashboardPayload } from "@/app/accounts/[accountId]/types";
+import type { Actor } from "../auth/actor";
 
 export const ALLOWED_DAYS = [7, 14, 30, 90];
 
@@ -99,7 +100,7 @@ export async function buildDashboard(options: {
   accountId: string;
   asUser: string | null;
   days: number;
-  auditHandle: string | null;
+  actor: Actor;
   /** Opt in to takeover buys, which Ads Manager also hides unless asked for. */
   includeTakeovers?: boolean;
   /**
@@ -122,12 +123,12 @@ export async function buildDashboard(options: {
     accountId,
     asUser,
     days,
-    auditHandle,
+    actor,
     includeTakeovers = false,
     includeRawSeries = false,
     skipComparisons = false,
   } = options;
-  const audit = { handle: auditHandle, accountId };
+  const audit = { actor, accountId };
   const warnings: string[] = [];
 
   const detail = await adsRequest<{ data?: AdsAccountDetail }>({
@@ -309,7 +310,7 @@ export async function buildDashboard(options: {
       entityIds: statsIds,
       range,
       metricGroups,
-      auditHandle,
+      actor,
     }),
     skipComparisons
       ? Promise.resolve({
@@ -326,7 +327,7 @@ export async function buildDashboard(options: {
           entityIds: previousStatsIds,
           range: previousRange,
           metricGroups,
-          auditHandle,
+          actor,
         }),
   ]);
 
@@ -391,7 +392,7 @@ export async function buildDashboard(options: {
         range: flightRange,
         // Only spend matters here; the engagement metrics are already on the dashboard.
         metricGroups: "BILLING",
-        auditHandle,
+        actor,
       });
 
       if (flightStats.failedRequests > 0) {

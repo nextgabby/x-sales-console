@@ -1,0 +1,70 @@
+import { buildBenchmark, SMALL_COHORT, type Benchmark } from "./benchmark";
+import { fetchExtendedHistory } from "./benchmark-history";
+import type { MetricSeries } from "./stats";
+import type { XCredentials } from "../store";
+import type { CampaignRow, DashboardPayload } from "@/app/accounts/[accountId]/types";
+
+/**
+ * Builds the benchmark, reaching past the window only when the window cannot carry the comparison.
+ *
+ * Shared by the panel's endpoint and the AI summary's because they must agree. When they each did
+ * their own assembly, only the panel attempted the longer lookback — so a campaign whose only
+ * history was older than 90 days showed a full comparison on screen and the summary beside it
+ * refused to discuss it, which reads as the tool contradicting itself.
+ */
+export async function buildBenchmarkWithLookback(options: {
+  credentials: XCredentials;
+  accountId: string;
+  asUser: string | null;
+  auditHandle: string | null;
+  dashboard: DashboardPayload & { rawSeries?: Record<string, MetricSeries> };
+  campaign: CampaignRow;
+  windowDays: number;
+}): Promise<Benchmark> {
+  const { credentials, accountId, asUser, auditHandle, dashboard, campaign, windowDays } = options;
+  const rawSeries = dashboard.rawSeries ?? {};
+
+  const recent = buildBenchmark({ campaign, history: dashboard.campaigns, rawSeries, windowDays });
+
+  /**
+   * Reaching further back is attempted only when the recent window cannot carry the comparison.
+   * Doing it always would be both slower and worse: a cohort that already has enough concurrent
+   * campaigns is the best baseline available, and diluting it with campaigns from last autumn would
+   * trade a like-for-like read for a longer one.
+   */
+  const thin =
+    recent.status === "no-cohort" ||
+    (recent.status === "ok" && recent.cohort.campaigns < SMALL_COHORT);
+
+  if (!thin || !campaign.objective) return recent;
+
+  const older = await fetchExtendedHistory({
+    credentials,
+    accountId,
+    asUser,
+    auditHandle,
+    timeZone: dashboard.account.timezone,
+    objective: campaign.objective,
+    coveredDays: windowDays,
+    /**
+     * Only campaigns that delivered inside the window, because only those can already be in the
+     * recent cohort. Excluding every row the dashboard lists would also drop campaigns that are
+     * merely *listed* — a flight that ended eight months ago is still returned by `GET /campaigns` —
+     * and those are exactly the ones the lookback exists to find.
+     */
+    excludeIds: new Set(
+      dashboard.campaigns
+        .filter((row) => row.totals.impressions > 0 || row.totals.spend > 0)
+        .map((row) => row.id),
+    ),
+  });
+
+  return buildBenchmark({
+    campaign,
+    history: dashboard.campaigns,
+    rawSeries,
+    windowDays,
+    older: older.campaigns,
+    lookback: { fromDate: older.fromDate, toDate: older.toDate, reason: older.reason },
+  });
+}

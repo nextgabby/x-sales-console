@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+as-user.config.json
+*.log
+.DS_Store
+
+# Generated slide decks, their base64 upload chunks, and the copy of the project they were built
+# from. All reproducible, and the duplicate would shadow the real source in any search.
+slides-build/
+.slides-build/

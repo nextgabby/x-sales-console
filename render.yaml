@@ -1,0 +1,27 @@
+# Render blueprint for the demo deployment only.
+#
+# The link this produces is public and unauthenticated, which is safe for exactly one reason:
+# DEMO_MODE makes the app serve a generated advertiser universe and never call the X Ads API. It
+# holds no credentials, writes nothing to disk, and has no real account behind it. Do not deploy
+# this without DEMO_MODE, and do not add real keys to it — the console is meant to be run locally,
+# where each person signs in as themselves and their own access decides what they can see.
+services:
+  - type: web
+    name: x-ads-sales-console-demo
+    runtime: node
+    plan: starter
+    region: oregon
+    rootDir: web
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
+      - key: DEMO_MODE
+        value: "1"
+      # Unset by default, so Grok answers are fixed sample text and an open URL cannot run up a
+      # bill. Set it to `live` only for a demo you are watching, with a key you can rotate.
+      - key: DEMO_AI
+        sync: false
+      - key: XAI_API_KEY
+        sync: false

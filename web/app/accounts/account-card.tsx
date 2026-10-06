@@ -18,6 +18,8 @@ type AccountSummary = {
   spendSparkline: number[];
   spend7d: number;
   accessible: boolean;
+  /** `denied` means X refused it, which is the only case re-adding fixes. */
+  accessState: "ok" | "denied" | "unavailable";
   warnings: string[];
 };
 
@@ -103,10 +105,22 @@ export function AccountCard({
         ) : isError ? (
           <div className="text-xs text-warn">Stats unavailable</div>
         ) : data && !data.accessible ? (
-          <div className="text-xs leading-relaxed text-warn">
-            <span className="font-semibold">Spy access has lapsed.</span> Re-open this account
-            in the spy list, then add it again.
-          </div>
+          data.accessState === "denied" ? (
+            <div className="text-xs leading-relaxed text-warn">
+              <span className="font-semibold">
+                {account.access === "spy" ? "Spy access has lapsed." : "You no longer have access."}
+              </span>{" "}
+              {account.access === "spy"
+                ? "Re-open it in the spy list, then add it again. It stays here until you remove it."
+                : "Ask the advertiser to restore your access."}
+            </div>
+          ) : (
+            /* Not a permissions refusal, so re-adding the account would achieve nothing. */
+            <div className="text-xs leading-relaxed text-warn">
+              <span className="font-semibold">Could not load this account.</span> Try Refresh in a
+              moment.
+            </div>
+          )
         ) : (
           <>
             <div>

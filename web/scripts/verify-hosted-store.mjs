@@ -30,6 +30,16 @@ import {
 } from "../lib/store/index.ts";
 import { checkHandle, allowedHandles } from "../lib/auth/allowlist.ts";
 
+/**
+ * The fixtures the assertions below are written against, pinned here rather than inherited.
+ *
+ * Both are read at call time, not import time, so setting them here is enough. A developer who has
+ * sourced their own `.env.local` would otherwise fail the allowlist and xAI checks for reasons that
+ * have nothing to do with the code under test.
+ */
+process.env.ALLOWED_HANDLES = "alice_sales, @BOB_SALES";
+process.env.XAI_API_KEY = "";
+
 let pass = 0;
 let fail = 0;
 

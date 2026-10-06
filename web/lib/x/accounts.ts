@@ -117,6 +117,15 @@ export type AccountSummary = {
    * "expired access" from "partial data" and lets the UI say so plainly.
    */
   accessible: boolean;
+  /**
+   * Why the account could not be read, when it could not be.
+   *
+   * `denied` is X refusing it — a lapsed spy grant or a revoked role — and is the only case where
+   * re-adding the account is the fix. `unavailable` is everything else: a rate limit, a 500, a
+   * dropped connection. Separated because the advice differs and guessing wrong wastes the rep's
+   * time on an account that was fine.
+   */
+  accessState: "ok" | "denied" | "unavailable";
   /** Set when enrichment partly failed, so the card can show what is missing. */
   warnings: string[];
 };
@@ -261,6 +270,7 @@ async function attempt<T>(
   label: string,
   warnings: string[],
   operation: () => Promise<T>,
+  onError?: (error: unknown) => void,
 ): Promise<T | null> {
   try {
     return await operation();
@@ -268,6 +278,7 @@ async function attempt<T>(
     const detail =
       error instanceof AdsApiError ? `${error.status}` : (error as Error)?.message ?? "failed";
     warnings.push(`${label} unavailable (${detail})`);
+    onError?.(error);
     return null;
   }
 }
@@ -377,16 +388,37 @@ export async function buildAccountSummary(
   const warnings: string[] = [];
   const asUser = account.asUser;
 
+  /**
+   * Why the campaigns call failed, when it did.
+   *
+   * The call doubles as the access probe, but "it returned nothing" and "you are not allowed to see
+   * it" are different facts and only X can tell them apart. A rate limit or a 500 would otherwise be
+   * reported to the rep as a lapsed grant, sending them to re-add an account that was never the
+   * problem.
+   */
+  let campaignsDenied = false;
+
   // Started before the Promise.all so the sparkline can await it without serializing the two.
   // Deleted campaigns are fetched so spend classification is right; the counts below ignore them.
-  const campaignsPromise = attempt("Campaigns", warnings, () =>
-    adsRequestAll<Campaign>({
-      path: `/accounts/${account.id}/campaigns`,
-      credentials,
-      asUser,
-      audit: { actor, accountId: account.id },
-      query: { with_deleted: true },
-    }),
+  const campaignsPromise = attempt(
+    "Campaigns",
+    warnings,
+    () =>
+      adsRequestAll<Campaign>({
+        path: `/accounts/${account.id}/campaigns`,
+        credentials,
+        asUser,
+        audit: { actor, accountId: account.id },
+        query: { with_deleted: true },
+      }),
+    /**
+     * 403 only. A 401 means the token itself is no longer good, which is not a fact about this
+     * account — telling the rep their grant on it lapsed would send them to re-add every account
+     * they have. The accounts route catches 401 for the whole page and offers re-authorization.
+     */
+    (error) => {
+      campaignsDenied = error instanceof AdsApiError && error.status === 403;
+    },
   );
 
   const [promotableUsers, access, fundingInstruments, campaigns, spendSparkline] =
@@ -423,11 +455,17 @@ export async function buildAccountSummary(
   const advertiserUserId = promotableUsers?.[0]?.user_id ?? null;
   // Campaigns is the canonical access probe: it is the call that 403s on a lapsed spy grant.
   const accessible = campaigns !== null;
+  const accessState: AccountSummary["accessState"] = accessible
+    ? "ok"
+    : campaignsDenied
+      ? "denied"
+      : "unavailable";
   // Deleted campaigns are fetched only to classify spend, so they stay out of the counts.
   const live = (campaigns ?? []).filter((campaign) => !campaign.deleted);
 
   return {
     accessible,
+    accessState,
     id: account.id,
     name: account.name,
     businessName: account.businessName,

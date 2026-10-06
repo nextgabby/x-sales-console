@@ -28,7 +28,11 @@ services:
     plan: starter
     region: oregon
     rootDir: web
-    buildCommand: npm ci && npm run build
+    # npm is upgraded first because the version bundled with Node 22.11.0 is 10.9.0, which fails
+    # here with "Exit handler never called!" before installing anything (npm/cli#8407, fixed in
+    # npm/cli#8429). Pinned to 11 rather than `latest`: npm 12 requires Node >= 22.22.2 and would
+    # install successfully, then refuse to run.
+    buildCommand: npm i -g npm@11 && npm ci && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_VERSION

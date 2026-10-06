@@ -39,6 +39,9 @@ import { checkHandle, allowedHandles } from "../lib/auth/allowlist.ts";
  */
 process.env.ALLOWED_HANDLES = "alice_sales, @BOB_SALES";
 process.env.XAI_API_KEY = "";
+// Hosted mode refuses to invent one, deliberately, so the suite has to bring its own. A fixed
+// value rather than a random one keeps a failure reproducible from the output alone.
+process.env.ENCRYPTION_KEY ||= Buffer.alloc(32, 7).toString("base64");
 
 let pass = 0;
 let fail = 0;

@@ -2,6 +2,8 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+// Imported rather than re-testing DATABASE_URL here, so "hosted" has one definition.
+import { isHosted } from "./db";
 import { DATA_DIR } from "./paths";
 
 const KEY_PATH = join(DATA_DIR, "master.key");
@@ -44,6 +46,21 @@ function loadMasterKey(): Buffer {
   if (fromEnv) {
     cachedKey = fromEnv;
     return fromEnv;
+  }
+
+  /**
+   * Hosted deployments must supply the key, because the file below cannot survive there.
+   *
+   * Render's filesystem is replaced on every deploy, so generating a key would encrypt every rep's
+   * token with something that disappears at the next push — and the damage would not surface until
+   * then, as a decryption failure for everyone at once rather than an error anybody could connect
+   * to the deploy that caused it. Refusing to start is the kinder failure.
+   */
+  if (isHosted()) {
+    throw new Error(
+      "ENCRYPTION_KEY is required when DATABASE_URL is set: a generated key would be lost on the " +
+        "next deploy and every stored token with it. Generate one with `openssl rand -base64 32`.",
+    );
   }
 
   mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });

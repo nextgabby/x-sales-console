@@ -31,6 +31,8 @@ export class AdsApiError extends Error {
   readonly status: number;
   readonly body: unknown;
   readonly asUser: string | null;
+  /** X's own error codes, e.g. `UNAUTHORIZED_CLIENT_APPLICATION`. Empty when the body had none. */
+  readonly codes: string[];
 
   constructor(params: { status: number; body: unknown; path: string; asUser: string | null }) {
     super(`X Ads API returned ${params.status} for ${params.path}: ${describe(params.body)}`);
@@ -38,7 +40,27 @@ export class AdsApiError extends Error {
     this.status = params.status;
     this.body = params.body;
     this.asUser = params.asUser;
+    this.codes = errorCodes(params.body);
   }
+
+  /**
+   * The developer app itself has no Ads API access, whoever is signed in.
+   *
+   * Worth separating from every other 403 because it is the one that re-authorizing cannot fix, and
+   * the two are otherwise indistinguishable: a lapsed advertiser grant and an unapproved app both
+   * arrive as 403 on the same call. Treating them alike sends someone round the sign-in loop
+   * repeatedly against a condition no amount of signing in will change.
+   */
+  get isAppNotApproved(): boolean {
+    return this.codes.includes("UNAUTHORIZED_CLIENT_APPLICATION");
+  }
+}
+
+function errorCodes(body: unknown): string[] {
+  const errors = (body as { errors?: Array<{ code?: string }> })?.errors;
+  return Array.isArray(errors)
+    ? errors.map((error) => error.code).filter((code): code is string => Boolean(code))
+    : [];
 }
 
 function describe(body: unknown): string {

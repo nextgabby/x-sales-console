@@ -27,6 +27,13 @@ rm -rf "$DD"
 cp -R "$LIVE_DATA_DIR" "$DD"
 rm -rf "$DD/users" "$DD/.migrated" "$DD/app-keys.json"
 
+# Pinned empty on purpose. These assertions are about the stored-keys path -- the launcher's wizard
+# and the migration that carries old keys into it -- and a developer with X_CONSUMER_KEY in
+# .env.local would otherwise exercise the env path instead and fail for the wrong reason. Next.js
+# leaves already-defined variables alone, so setting them empty here beats the file.
+export X_CONSUMER_KEY=""
+export X_CONSUMER_SECRET=""
+
 EXPECTED=$(python3 -c "
 import json
 c=json.load(open('$DD/connection.json'))

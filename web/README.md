@@ -78,6 +78,29 @@ Two things about ordering, both of which cost real time if missed:
   sales team outright. Raising it goes through your X representative; confirm it before rollout
   rather than after.
 
+### When sign-in works but no accounts load
+
+X returns `403 UNAUTHORIZED_CLIENT_APPLICATION`, naming the client application id:
+
+```
+The client application with id NNNNNNNN making this request does not have
+access to Twitter Ads API. Ensure your application has advertiser-api access.
+```
+
+This means the app, not the person, is being refused — so re-authorizing cannot fix it, and the
+console says so rather than offering a sign-in link that would loop. Quote that application id when
+requesting access.
+
+To see exactly what X says for a stored authorization, including whether the token itself is good:
+
+```bash
+node --import ./scripts/ts-hook.mjs scripts/diagnose-access.mjs
+```
+
+It calls `GET /accounts` and, as a control, `verify_credentials` on the regular API. The control
+succeeding while the Ads API call fails is the signature of an unapproved app: the token is valid and
+the app's access is what is missing. Keys are printed masked.
+
 ### Callback URLs
 
 They must match exactly, including any trailing slash, and X accepts `127.0.0.1` but not `localhost`.

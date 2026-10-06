@@ -108,7 +108,34 @@ export function AccountsView() {
   }, [data?.groups, favorites, search]);
 
   const totalAccounts = groups.reduce((sum, group) => sum + group.accounts.length, 0);
-  const notConnected = (error as (Error & { code?: string }) | null)?.code === "not-connected";
+  const errorCode = (error as (Error & { code?: string }) | null)?.code;
+  const notConnected = errorCode === "not-connected";
+
+  if (errorCode === "app-not-approved") {
+    return (
+      <Shell handle={null} demo={false} hosted={false}>
+        <Callout tone="negative">
+          <p className="font-semibold">This app does not have Ads API access.</p>
+          <p className="mt-2">
+            Your sign-in worked — X is refusing the app, not your account, so authorizing again will
+            not change anything. Ads API access is granted per app, and is not inherited from
+            another app that already has it. Request it for this app&apos;s ID through the{" "}
+            <a
+              className="font-semibold underline"
+              href="https://docs.x.com/forms/ads-api-access"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Ads API access form
+            </a>{" "}
+            or your X representative.
+          </p>
+          {/* The message names the client application id, which is what the request has to quote. */}
+          <p className="mt-2 font-mono text-xs opacity-80">{(error as Error).message}</p>
+        </Callout>
+      </Shell>
+    );
+  }
 
   if (notConnected) {
     return (

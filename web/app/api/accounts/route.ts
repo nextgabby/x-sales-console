@@ -38,6 +38,17 @@ export async function GET() {
       error: null,
     });
   } catch (error) {
+    /**
+     * Reported separately from a stale token, because signing in again cannot fix it: the app, not
+     * the person, is what X is refusing. Left as "not-connected" it produces an endless loop of
+     * successful authorizations followed by the same failure.
+     */
+    if (error instanceof AdsApiError && error.isAppNotApproved) {
+      return NextResponse.json(
+        { error: "app-not-approved", detail: error.message },
+        { status: 403 },
+      );
+    }
     if (error instanceof AdsApiError && (error.status === 401 || error.status === 403)) {
       return NextResponse.json({ error: "not-connected" }, { status: 401 });
     }

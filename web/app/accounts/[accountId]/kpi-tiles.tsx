@@ -66,9 +66,17 @@ export function KpiTiles({
               {spec.format(current, currency)}
             </div>
 
+            {/*
+              Spend carries the sparkline because when the money went out matters as much as the
+              total: a period that doubled on one burst and one that ramped steadily read the same
+              from a single figure. It keeps the comparison line too, being the number a rep is
+              most likely to say out loud.
+            */}
             {isSpend ? (
               <Sparkline values={spendSeries} className="mt-2 h-7 w-full text-accent" />
-            ) : comparable ? (
+            ) : null}
+
+            {comparable ? (
               <div className="mt-2 text-[11px] text-muted">
                 vs {spec.format(previous, currency)} prior {rangeDays}d
               </div>

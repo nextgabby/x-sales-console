@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge, Button, buttonClasses, Callout, cx, Skeleton } from "@/components/ui";
-import { formatCurrency, formatTimezone, titleCase } from "@/lib/format";
+import { formatCurrency, formatDayLabel, formatTimezone, titleCase } from "@/lib/format";
 import { CampaignDrawer } from "./campaign-drawer";
 import { CampaignTable } from "./campaign-table";
 import { KpiTiles } from "./kpi-tiles";
@@ -49,6 +49,28 @@ export function DashboardView({ accountId }: { accountId: string }) {
       return (await response.json()) as DashboardPayload;
     },
   });
+
+  /**
+   * Whether the prior window holds anything to compare against, and when the spend on show
+   * actually started.
+   *
+   * An account whose flight launched inside the current window has a prior window of pure zeros,
+   * which is accurate but makes every tile read "New" — indistinguishable, to a rep who just added
+   * the account, from the page having failed to load. Stated once here instead.
+   */
+  const baseline = useMemo(() => {
+    if (!data) return null;
+    if (data.previousTotals.spend > 0 || data.previousTotals.impressions > 0) return null;
+
+    // Earliest start among the campaigns that actually spent, which is the flight on screen
+    // rather than the oldest campaign sitting on the account.
+    const starts = data.campaigns
+      .filter((campaign) => campaign.totals.spend > 0 && campaign.startTime)
+      .map((campaign) => campaign.startTime!.slice(0, 10))
+      .sort();
+
+    return { startedOn: starts[0] ?? null };
+  }, [data]);
 
   // The range lives in the URL so a rep can share or bookmark a specific view.
   const setRange = useCallback(
@@ -193,7 +215,17 @@ export function DashboardView({ accountId }: { accountId: string }) {
             currency={data.account.currency}
             spendSeries={data.spendSeries}
             rangeDays={range}
+            comparable={baseline === null}
           />
+
+          {baseline ? (
+            <p className="text-xs text-muted">
+              Nothing ran in the prior {range} days, so there is no period-over-period comparison.
+              {baseline.startedOn
+                ? ` The campaigns spending here started ${formatDayLabel(baseline.startedOn)}.`
+                : null}
+            </p>
+          ) : null}
 
           {data.range.provisionalDays > 0 ? (
             <p className="text-xs text-muted">

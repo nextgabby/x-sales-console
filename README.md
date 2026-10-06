@@ -56,3 +56,4 @@ Add a **stdio** block named `x-ads-as-user` inside the existing `"mcpServers"` o
 npm install --registry https://registry.npmjs.org
 npm run build
 ```
+# x-sales-console

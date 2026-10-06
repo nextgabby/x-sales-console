@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Badge, Button, Callout, cx, Input } from "@/components/ui";
 
-type AiStatus = { configured: boolean; model?: string };
+type AiStatus = { configured: boolean; model?: string; reachesXai?: boolean };
 
 /**
  * The Grok panel, shared by the campaign comparison and the creative list.
@@ -124,6 +124,16 @@ export function AskGrok({
             {ai.model ? <Badge tone="accent">{ai.model}</Badge> : null}
           </h2>
           <p className="mt-0.5 text-xs text-muted">{description}</p>
+          {/*
+            The disclosure sits here rather than on the setup page, which a rep sees once and which
+            no longer shows them anything when the key belongs to the deployment. This is the button
+            that does the sending — and in the demo nothing is sent at all, so it says nothing.
+          */}
+          {ai.reachesXai ? (
+            <p className="mt-0.5 text-xs text-muted">
+              Figures from this view are sent to xAI when you press {primaryLabel}, and not before.
+            </p>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2">

@@ -42,6 +42,13 @@ process.env.XAI_API_KEY = "";
 // Hosted mode refuses to invent one, deliberately, so the suite has to bring its own. A fixed
 // value rather than a random one keeps a failure reproducible from the output alone.
 process.env.ENCRYPTION_KEY ||= Buffer.alloc(32, 7).toString("base64");
+/**
+ * Pinned for the same reason, and found the hard way: without these `resolveCredentials` returns
+ * null before it ever decrypts anything, so the round-trip assertion failed in a clean shell and
+ * passed in one that happened to have a developer's app keys exported.
+ */
+process.env.X_CONSUMER_KEY = "verify-store-consumer-key";
+process.env.X_CONSUMER_SECRET = "verify-store-consumer-secret";
 
 let pass = 0;
 let fail = 0;

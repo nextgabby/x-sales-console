@@ -321,6 +321,12 @@ export async function aiKeyStatus(userId: string) {
     keyPreview: maskSecret(resolved.apiKey),
     /** A stored key exists but is being ignored in favour of the environment. */
     storedKeyShadowed: resolved.source === "env" && Boolean(stored?.apiKey),
+    /**
+     * Whether a question actually leaves for xAI, so the panels can say so next to the button that
+     * sends it. False in demo mode with canned answers, which reports itself as configured above but
+     * never makes a request.
+     */
+    reachesXai: !(isDemoMode() && !isDemoAiLive()),
   };
 }
 

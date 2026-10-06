@@ -72,6 +72,14 @@ export function GrokKey({ hosted }: { hosted: boolean }) {
 
   const fromEnv = data?.source === "env";
 
+  /**
+   * Nothing here belongs to a rep on the shared deployment: the key is the team's and the model is
+   * whatever was set alongside it, so a masked preview and an environment variable name are only an
+   * invitation to fiddle. The panel still appears when a rep supplies their own key, and always in
+   * the local install, where the reader is the person who configured it.
+   */
+  if (hosted && fromEnv) return null;
+
   return (
     <section id="grok" className="rounded-2xl border border-border bg-surface p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">

@@ -115,8 +115,15 @@ export function AccountsView() {
       <Shell handle={null} demo={false} hosted={false}>
         <Callout tone="warn">
           Your stored authorization is no longer valid.{" "}
-          <a className="font-semibold underline" href="/setup">
-            Reconnect your account
+          {/*
+           * Straight into the handshake, not to /setup. The stored token still looks like a session
+           * to the app — it cannot tell a revoked token from a live one without calling X — so
+           * /setup would report "connected" and send the rep back here. Re-authorizing overwrites
+           * the token in place, which is the actual fix in every case that lands here: a revoked
+           * app, a rotated consumer key, or an authorization that predates Ads API approval.
+           */}
+          <a className="font-semibold underline" href="/api/auth/start">
+            Re-authorize with X
           </a>
           .
         </Callout>

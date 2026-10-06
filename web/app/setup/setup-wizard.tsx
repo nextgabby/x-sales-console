@@ -281,6 +281,15 @@ function ConnectedPanel({
       </p>
       <div className="flex gap-3">
         <Button onClick={onContinue}>View your accounts</Button>
+        {/*
+         * "Connected" here means a token is stored, which is not the same as it working: a revoked
+         * app, a rotated consumer key, or an authorization predating Ads API approval all look
+         * identical until X is called. Re-authorizing overwrites the token in place, so this is the
+         * way out that does not involve disconnecting and starting over.
+         */}
+        <a href="/api/auth/start" className={buttonClasses("secondary")}>
+          Re-authorize
+        </a>
         <Button
           variant="danger"
           onClick={async () => {

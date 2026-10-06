@@ -358,9 +358,13 @@ function Shell({
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-10 border-b border-border bg-canvas/80 backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-3">
+          {/*
+            No X logo or stand-in for one. The glyph that used to sit here was a double-struck X
+            doing the job of X's mark, which is the app claiming an affiliation it does not have —
+            the same impression that got the deployment flagged as phishing.
+          */}
           <div className="flex items-center gap-2 text-sm font-bold tracking-tight">
-            <span className="text-xl leading-none">𝕏</span>
-            <span>Ads Sales Console</span>
+            <span>ATS Ads Sales Console</span>
           </div>
           <div className="flex items-center gap-3">
             {handle ? (

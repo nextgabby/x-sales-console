@@ -20,7 +20,7 @@ export const metadata: Metadata = {
    * run scripts sees this title and almost nothing else — a brand name alone on an unaffiliated
    * host, which is how Google Safe Browsing came to block the deployment as a phishing page.
    */
-  title: "Ads Sales Console",
+  title: "ATS Ads Sales Console",
   description: "Campaign performance for the advertiser accounts you have access to.",
 };
 

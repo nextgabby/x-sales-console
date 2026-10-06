@@ -54,7 +54,7 @@ export function SetupWizard() {
           and Safe Browsing blocked this deployment as one. Authorization is described below instead,
           including the fact that it happens on x.com rather than here.
         */}
-        <h1 className="text-3xl font-bold tracking-tight">Ads Sales Console</h1>
+        <h1 className="text-3xl font-bold tracking-tight">ATS Ads Sales Console</h1>
         <p className="text-[15px] leading-relaxed text-muted">
           {data.hosted ? (
             <>
@@ -104,7 +104,7 @@ function HostedSignIn({ data }: { data: ConnectionStatus }) {
           </a>
           <p className="text-sm leading-relaxed text-muted">
             {data.allowlistConfigured
-              ? "Access is limited to approved handles. If yours has not been added yet, ask whoever runs this deployment to add it."
+              ? "Access is limited to approved handles. If yours has not been added yet, ask IYKYK."
               : "You will be asked to approve read access to your ad accounts."}
           </p>
         </>

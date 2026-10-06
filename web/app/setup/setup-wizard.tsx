@@ -47,14 +47,21 @@ export function SetupWizard() {
   return (
     <div className="rise space-y-10">
       <header className="space-y-3">
-        <Badge tone="accent">Sales Console</Badge>
-        <h1 className="text-3xl font-bold tracking-tight">Sign in with X</h1>
+        <Badge tone="accent">Internal tool</Badge>
+        {/*
+          The headline names the product, not the identity provider. A page on an unaffiliated domain
+          whose first line is "Sign in with <brand>" has the shape of a credential-harvesting page,
+          and Safe Browsing blocked this deployment as one. Authorization is described below instead,
+          including the fact that it happens on x.com rather than here.
+        */}
+        <h1 className="text-3xl font-bold tracking-tight">Ads Sales Console</h1>
         <p className="text-[15px] leading-relaxed text-muted">
           {data.hosted ? (
             <>
-              You authorize with <span className="text-ink">your own</span> X account, and every
-              request the console makes is signed with your token. You see exactly the advertiser
-              accounts you already have access to — nothing is shared between people.
+              Campaign performance for the advertiser accounts you already have access to. You
+              approve access on <span className="text-ink">x.com</span> — your password is never
+              entered here — and every request the console makes afterwards is signed with{" "}
+              <span className="text-ink">your own</span> token, so nothing is shared between people.
             </>
           ) : (
             <>

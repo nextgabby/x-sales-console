@@ -15,7 +15,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "X Ads Sales Console",
+  /**
+   * Deliberately not led by "X". The sign-in page renders on the client, so a crawler that does not
+   * run scripts sees this title and almost nothing else — a brand name alone on an unaffiliated
+   * host, which is how Google Safe Browsing came to block the deployment as a phishing page.
+   */
+  title: "Ads Sales Console",
   description: "Campaign performance for the advertiser accounts you have access to.",
 };
 

@@ -545,7 +545,14 @@ export async function buildDashboard(options: {
    * projected to go unspent if the current run rate holds. It is the reason to make a call today
    * rather than at the end of the flight, when nothing can be done about it.
    */
-  const paced = rows.filter((row) => row.pacing.basis === "flight");
+  /**
+   * Open flights only. A closed one has nothing projected and nothing at risk, so folding its
+   * committed total in would inflate "Committed" with money that is already settled and quietly
+   * shrink the share of the account that "Budget at risk" appears to cover.
+   */
+  const paced = rows.filter(
+    (row) => row.pacing.basis === "flight" && row.pacing.status !== "ended",
+  );
   const atRisk = paced.filter(
     (row) => row.pacing.status === "underpacing" && (row.pacing.projectedShortfall ?? 0) > 0,
   );

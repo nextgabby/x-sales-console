@@ -306,7 +306,17 @@ export function computePacing(options: {
     return { ...result, status: "scheduled", basis: "none" };
   }
 
-  const live = entityStatus === "ACTIVE";
+  /**
+   * A closed flight is not live, whatever `entity_status` still says.
+   *
+   * Advertisers rarely switch a campaign off once its end date passes — there is no reason to —
+   * so `entity_status` stays `ACTIVE` on flights that finished years ago and X marks them
+   * `EXPIRED` in `effective_status` instead. Trusting `entity_status` alone reported 51 campaigns
+   * on one account as live and never delivering, with $512,000 a day of budget behind them, the
+   * oldest having ended in 2022.
+   */
+  const flightEnded = endDate != null && endDate <= lastCompleteDay;
+  const live = entityStatus === "ACTIVE" && !flightEnded;
 
   /**
    * Live, funded, and spending nothing. These need their own statuses because the pace ratio is
@@ -328,6 +338,12 @@ export function computePacing(options: {
     startDate != null && endDate != null && flight.totalBudget != null && flightSpend != null;
 
   if (!canMeasureFlight) {
+    /**
+     * A closed flight has no pace to hold and nothing left to act on, so it must not fall through
+     * to the delivery-rate verdict below — that would read a flight which ended in 2022 as behind
+     * on its budget today.
+     */
+    if (flightEnded) return { ...result, status: "ended", basis: "none" };
     // A paused campaign's recent average describes history, not a pace it is failing to hold.
     if (!live) return { ...result, status: "paused", basis: "none" };
     if (result.deliveryRate == null) return { ...result, status: "unknown", basis: "none" };
@@ -335,7 +351,7 @@ export function computePacing(options: {
   }
 
   const totalDays = dayDiff(startDate!, endDate!) + 1;
-  const ended = endDate! <= lastCompleteDay;
+  const ended = flightEnded;
   // Only complete days count, matching the days flightSpend was summed over.
   const elapsedDays = Math.min(dayDiff(startDate!, lastCompleteDay) + 1, totalDays);
 

@@ -64,6 +64,13 @@ export function PacingPanel({
 
   const ranked = campaigns
     .filter((row) => row.pacing.basis !== "none" || row.pacing.status === "ended")
+    /**
+     * Campaigns with no activity in the range sit behind a toggle in the campaign table, so
+     * listing them here puts two panels on the same screen disagreeing about which campaigns the
+     * account is running. The exception is one that is live and funded yet delivering nothing,
+     * which is the entire point of this panel and has no activity by definition.
+     */
+    .filter((row) => !row.dormant || ACTIONABLE.has(row.pacing.status))
     .map((row) => ({ row, score: severity(row.pacing) }))
     .sort((a, b) => b.score - a.score)
     .map(({ row }) => row);
@@ -330,10 +337,11 @@ function explain(pacing: CampaignPacing, currency: string | null): string {
           )} elapsed. Tracking to deliver in full.`
         : rate;
     case "ended":
-      return `Flight closed having spent ${formatPercent(
-        pacing.consumed ?? 0,
-        0,
-      )} of the committed budget.`;
+      // Without a committed total there is no percentage to quote, and quoting 0% would read as
+      // a flight that delivered nothing rather than one we cannot measure.
+      return pacing.consumed != null
+        ? `Flight closed having spent ${formatPercent(pacing.consumed, 0)} of the committed budget.`
+        : "Flight has ended.";
     case "paused":
       return "Paused, so there is no pace to hold.";
     case "scheduled":

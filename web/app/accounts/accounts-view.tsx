@@ -37,7 +37,6 @@ type SpyGrant = {
 
 type AccountsPayload = {
   handle: string | null;
-  favorites: string[];
   spyGrants: SpyGrant[];
   groups: AccountGroup[];
   /** Set by a demo deployment, where nothing is stored and nothing can be changed. */
@@ -69,24 +68,6 @@ export function AccountsView() {
     queryFn: fetchAccounts,
   });
 
-  const toggleFavorite = useMutation({
-    mutationFn: async (accountId: string) => {
-      const response = await fetch("/api/favorites", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountId }),
-      });
-      return response.json() as Promise<{ favorites: string[] }>;
-    },
-    onSuccess: (result) => {
-      queryClient.setQueryData<AccountsPayload>(["accounts"], (current) =>
-        current ? { ...current, favorites: result.favorites } : current,
-      );
-    },
-  });
-
-  const favorites = useMemo(() => new Set(data?.favorites ?? []), [data?.favorites]);
-
   const groups = useMemo(() => {
     const term = search.trim().toLowerCase();
     return (data?.groups ?? []).map((group) => ({
@@ -98,14 +79,10 @@ export function AccountsView() {
             .filter(Boolean)
             .some((value) => value!.toLowerCase().includes(term));
         })
-        .sort((a, b) => {
-          const favoriteDelta = Number(favorites.has(b.id)) - Number(favorites.has(a.id));
-          if (favoriteDelta !== 0) return favoriteDelta;
-          // Recently updated accounts are the ones a rep is most likely working on.
-          return (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
-        }),
+        // Recently updated accounts are the ones a rep is most likely working on.
+        .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")),
     }));
-  }, [data?.groups, favorites, search]);
+  }, [data?.groups, search]);
 
   const totalAccounts = groups.reduce((sum, group) => sum + group.accounts.length, 0);
   const errorCode = (error as (Error & { code?: string }) | null)?.code;
@@ -217,9 +194,7 @@ export function AccountsView() {
             <AccountGroupSection
               key={group.asUser ?? "direct"}
               group={group}
-              favorites={favorites}
               demo={Boolean(data?.demo)}
-              onToggleFavorite={(id) => toggleFavorite.mutate(id)}
               onRemoveHandle={() =>
                 queryClient.invalidateQueries({ queryKey: ["accounts"] })
               }
@@ -233,15 +208,11 @@ export function AccountsView() {
 
 function AccountGroupSection({
   group,
-  favorites,
   demo,
-  onToggleFavorite,
   onRemoveHandle,
 }: {
   group: AccountGroup;
-  favorites: Set<string>;
   demo: boolean;
-  onToggleFavorite: (accountId: string) => void;
   onRemoveHandle: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -298,8 +269,6 @@ function AccountGroupSection({
                 key={`${account.asUser ?? "direct"}:${account.id}`}
                 account={account}
                 limiter={summaryLimiter}
-                isFavorite={favorites.has(account.id)}
-                onToggleFavorite={() => onToggleFavorite(account.id)}
               />
             ))}
           </div>

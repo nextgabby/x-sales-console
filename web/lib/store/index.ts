@@ -169,24 +169,6 @@ export async function takePendingRequestToken(
   return { token: pending.token, tokenSecret: decryptSecret(pending.tokenSecret) };
 }
 
-/* ------------------------------------------------------------------------------------ favorites */
-
-export async function readFavorites(userId: string): Promise<string[]> {
-  return backend().listFavorites(userId);
-}
-
-export async function toggleFavorite(userId: string, accountId: string): Promise<string[]> {
-  const current = new Set(await backend().listFavorites(userId));
-  if (current.has(accountId)) {
-    current.delete(accountId);
-  } else {
-    current.add(accountId);
-  }
-  const next = [...current];
-  await backend().putFavorites(userId, next);
-  return next;
-}
-
 /* ----------------------------------------------------------------------------------- spy grants */
 
 /**

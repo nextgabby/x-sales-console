@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { readFavorites, readSpyGrants } from "@/lib/store";
+import { readSpyGrants } from "@/lib/store";
 import { AdsApiError } from "@/lib/x/ads-client";
 import { grantToRef, listDirectAccounts, type AccountRef } from "@/lib/x/accounts";
 import { isDemoMode } from "@/lib/demo/mode";
@@ -76,7 +76,6 @@ export async function GET() {
 
   return NextResponse.json({
     handle: session.handle,
-    favorites: await readFavorites(session.userId),
     spyGrants: grants,
     groups,
     /**

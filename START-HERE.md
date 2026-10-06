@@ -161,7 +161,7 @@ Everything stays on your laptop, in `~/.x-ads-sales-console`:
 | --- | --- |
 | `connection.json` | Your API key, secret and access token, all encrypted |
 | `audit.jsonl` | One line per Ads API request: when, which account, as which advertiser |
-| `favorites.json`, `spy-handles.json`, `ai.json` | Your pinned accounts, handles and AI settings |
+| `spy-handles.json`, `ai.json` | The advertisers you added and your AI settings |
 
 Nothing is sent anywhere except to X and, if you enable summaries, to xAI. There is no shared server
 and no shared credential. The audit file is the record of which accounts you looked at.

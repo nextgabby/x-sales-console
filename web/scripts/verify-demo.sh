@@ -31,7 +31,6 @@ check() {
 
 print -r -- '{"days":30}' > /tmp/v-body-summary.json
 print -r -- '{"days":30,"question":"rank by best ctr"}' > /tmp/v-body-question.json
-print -r -- '{"accountId":"18ce5dem0002"}' > /tmp/v-body-fav.json
 print -r -- '{"consumerKey":"x","consumerSecret":"y"}' > /tmp/v-body-keys.json
 print -r -- '{}' > /tmp/v-body-empty.json
 
@@ -172,33 +171,6 @@ print('Sample response' in t and 'generated' in t and 'headline creative' not in
 )"
 
 echo "== stored settings =="
-# Demo favourites live in the visitor's own cookie, so the jar is the state. Toggling twice through
-# one jar must land back where it started.
-rm -f /tmp/v-jar-a.txt /tmp/v-jar-b.txt
-check "favourite toggles on, then off, without touching disk" "$(
-curl -s -c /tmp/v-jar-a.txt -b /tmp/v-jar-a.txt -X POST "$B/api/favorites" \
-  -H 'content-type: application/json' --data @/tmp/v-body-fav.json > /tmp/v-fav1.json
-curl -s -c /tmp/v-jar-a.txt -b /tmp/v-jar-a.txt -X POST "$B/api/favorites" \
-  -H 'content-type: application/json' --data @/tmp/v-body-fav.json > /tmp/v-fav2.json
-python3 -c "
-import json
-a=json.load(open('/tmp/v-fav1.json')); b=json.load(open('/tmp/v-fav2.json'))
-print('18ce5dem0002' in a['favorites'] and '18ce5dem0002' not in b['favorites'])
-"
-)"
-
-# The reason the cookie exists: a public link has many concurrent visitors, and server memory would
-# show one reviewer's star to everyone else.
-check "one visitor's favourite is invisible to another" "$(
-curl -s -c /tmp/v-jar-a.txt -b /tmp/v-jar-a.txt -X POST "$B/api/favorites" \
-  -H 'content-type: application/json' --data @/tmp/v-body-fav.json > /tmp/v-fav-a.json
-curl -s -c /tmp/v-jar-b.txt -b /tmp/v-jar-b.txt "$B/api/favorites" > /tmp/v-fav-b.json
-python3 -c "
-import json
-a=json.load(open('/tmp/v-fav-a.json')); b=json.load(open('/tmp/v-fav-b.json'))
-print('18ce5dem0002' in a['favorites'] and '18ce5dem0002' not in b['favorites'])
-"
-)"
 check "setup refuses to store keys" "$(
 S=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$B/api/setup" -H 'content-type: application/json' --data @/tmp/v-body-keys.json)
 python3 -c "print('$S' != '200')"

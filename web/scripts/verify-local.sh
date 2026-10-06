@@ -38,10 +38,9 @@ EXPECTED=$(python3 -c "
 import json
 c=json.load(open('$DD/connection.json'))
 s=json.load(open('$DD/spy-handles.json'))
-f=json.load(open('$DD/favorites.json'))
 print(json.dumps({
   'userId': c['userId'], 'handle': c['handle'], 'consumerKey': c['consumerKey'],
-  'spyGrantCount': len(s), 'favoriteCount': len(f),
+  'spyGrantCount': len(s),
 }))
 ")
 
@@ -87,8 +86,8 @@ d=json.load(open('/tmp/l-conn.json'))
 print(d['consumerKeyPreview'] is not None and d['keysFromEnv'] is False)
 ")"
 # The point of the fallback: no cookie was sent with any of these requests.
-check "favourites resolve with no session cookie at all" "$(python3 -c "
-print('$(curl -s -o /dev/null -w '%{http_code}' "$B/api/favorites")' == '200')
+check "a session-gated route resolves with no session cookie at all" "$(python3 -c "
+print('$(curl -s -o /dev/null -w '%{http_code}' "$B/api/ai/key")' == '200')
 ")"
 check "the saved advertisers are served" "$(
 curl -s "$B/api/spy" > /tmp/l-spy.json

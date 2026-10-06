@@ -11,7 +11,20 @@
 import { createHmac } from "node:crypto";
 
 import { ensureSchema } from "../lib/db.ts";
-import { saveUser } from "../lib/store/index.ts";
+import { saveSpyGrants, saveUser } from "../lib/store/index.ts";
+
+/**
+ * Alice's, so the suite has per-rep data to check the scoping of over http. Seeded here rather than
+ * posted to `/api/spy`, which verifies each account against the Ads API and so cannot write anything
+ * while the suite points that base at a dead port.
+ */
+const ALICE_GRANT = {
+  accountId: "18ce0000777",
+  asUser: "harborline",
+  name: "Harborline Travel",
+  timezone: "America/Los_Angeles",
+  approvalStatus: "ACCEPTED",
+};
 
 const REPS = [
   { userId: "111111111111", handle: "alice_sales", displayName: "Alice Sales" },
@@ -36,6 +49,8 @@ for (const rep of REPS) {
   });
   lines.push(`${rep.handle} ${rep.userId} ${cookieFor(rep.userId)}`);
 }
+
+await saveSpyGrants(REPS[0].userId, [{ ...ALICE_GRANT, addedAt: new Date().toISOString() }]);
 
 // Last, so a tampered cookie can be tested against a well-formed one.
 lines.push(`forged 999999999999 ${Buffer.from("111111111111").toString("base64url")}.notavalidsignature`);

@@ -85,9 +85,6 @@ export type StoreBackend = {
   putPendingToken(token: PendingToken): Promise<void>;
   takePendingToken(token: string): Promise<PendingToken | null>;
 
-  listFavorites(userId: string): Promise<string[]>;
-  putFavorites(userId: string, accountIds: string[]): Promise<void>;
-
   listSpyGrants(userId: string): Promise<SpyGrant[]>;
   putSpyGrants(userId: string, grants: SpyGrant[]): Promise<void>;
   deleteSpyGrant(userId: string, accountId: string): Promise<void>;

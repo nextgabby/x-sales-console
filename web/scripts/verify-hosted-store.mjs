@@ -17,7 +17,6 @@ import {
   getUser,
   listUsers,
   readAudit,
-  readFavorites,
   readSpyGrants,
   recordAudit,
   resolveCredentials,
@@ -26,7 +25,6 @@ import {
   saveSpyGrants,
   saveUser,
   takePendingRequestToken,
-  toggleFavorite,
 } from "../lib/store/index.ts";
 import { checkHandle, allowedHandles } from "../lib/auth/allowlist.ts";
 
@@ -92,19 +90,6 @@ await saveUser({
 
 check("both users are stored", (await listUsers()).length === 2);
 check("a user reads back under their own id", (await getUser(ALICE))?.handle === "alice_sales");
-
-await toggleFavorite(ALICE, "18ce0000001");
-await toggleFavorite(BOB, "18ce0000002");
-const aliceFavs = await readFavorites(ALICE);
-const bobFavs = await readFavorites(BOB);
-check(
-  "favourites do not cross between reps",
-  aliceFavs.includes("18ce0000001") &&
-    !aliceFavs.includes("18ce0000002") &&
-    bobFavs.includes("18ce0000002") &&
-    !bobFavs.includes("18ce0000001"),
-  `${JSON.stringify(aliceFavs)} vs ${JSON.stringify(bobFavs)}`,
-);
 
 await saveSpyGrants(ALICE, [
   {
@@ -188,7 +173,7 @@ check("and does not appear under another rep", bobAudit.length === 0);
 console.log("== removing a rep ==");
 await deleteUser(ALICE);
 check("the user record is gone", (await getUser(ALICE)) === null);
-check("their favourites went with it", (await readFavorites(ALICE)).length === 0);
+check("their advertisers went with it", (await readSpyGrants(ALICE)).length === 0);
 // Deliberately not cascaded: who looked at which advertiser has to outlive their access.
 const auditAfter = await readAudit({ userId: ALICE, limit: 10 });
 check("but the audit trail survives them", auditAfter.length === 1, `${auditAfter.length} rows`);

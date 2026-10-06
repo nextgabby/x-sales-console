@@ -71,8 +71,8 @@ function userFile(userId: string, name: string): string {
  * Moves a single-user installation into the per-user layout.
  *
  * Before sessions existed there was one connection per machine, stored flat in `DATA_DIR`. Anyone
- * who had been using the local tool has real data in that shape: their authorization, their spy
- * grants, their favourites. Without this they would open the console to a setup wizard, with the
+ * who had been using the local tool has real data in that shape: their authorization and their spy
+ * grants. Without this they would open the console to a setup wizard, with the
  * advertisers they had added apparently gone — and would have to find their own app's keys again to
  * get back in.
  *
@@ -129,7 +129,7 @@ function migrateLegacyLayout() {
     });
   }
 
-  for (const name of ["favorites.json", "spy-handles.json", "ai.json"]) {
+  for (const name of ["spy-handles.json", "ai.json"]) {
     const from = join(DATA_DIR, name);
     if (!existsSync(from) || existsSync(join(dir, name))) continue;
     // Parsed rather than copied, so a file holding `null` does not become a confusing read later.
@@ -182,15 +182,6 @@ export const fileBackend: StoreBackend = {
     // Removed as part of the read, so a replayed callback finds nothing.
     rmSync(path, { force: true });
     return pending && pending.token === token ? pending : null;
-  },
-
-  async listFavorites(userId) {
-    return readJson<string[]>(userFile(userId, "favorites.json"), []);
-  },
-
-  async putFavorites(userId, accountIds) {
-    ensureDir(userDir(userId));
-    writeJson(userFile(userId, "favorites.json"), accountIds);
   },
 
   async listSpyGrants(userId) {

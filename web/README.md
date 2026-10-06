@@ -136,7 +136,6 @@ Everything is written to `~/.x-ads-sales-console/` with `0600` permissions:
 | `master.key` | Random 32-byte AES-256-GCM key |
 | `app-keys.json` | The developer app's consumer key, secret encrypted |
 | `users/<id>/connection.json` | Your tokens, secrets encrypted |
-| `users/<id>/favorites.json` | Pinned account IDs |
 | `users/<id>/spy-handles.json` | The advertisers you have added |
 | `users/<id>/ai.json` | Your xAI API key, encrypted, and the chosen model |
 | `audit.jsonl` | Every advertiser data access: who, account, endpoint, timestamp |
@@ -145,7 +144,7 @@ Set `DATA_DIR` to relocate it. **Disconnect** in Settings deletes the stored cre
 the app itself happens in your X account settings.
 
 Installations that predate sessions kept one connection flat in `DATA_DIR`. They are moved into the
-layout above automatically on first launch — tokens, advertisers and favourites all carry over, and
+layout above automatically on first launch — tokens and advertisers carry over, and
 the originals are copied rather than deleted, so nothing is lost if the move gets something wrong.
 A `.migrated` marker stops it happening twice.
 
@@ -234,7 +233,7 @@ What changes, and what does not:
   there is no code path from a demo deployment to `ads-api.x.com`.
 - **Nothing is stored.** Every write in `lib/store.ts` is a no-op, the connection and spy grants are
   fixed constants, and no `master.key` is created. The app therefore runs on a host with a read-only
-  or ephemeral filesystem. Favourites are held in memory and reset on restart.
+  or ephemeral filesystem.
 - **Grok answers are fixed sample text**, each labelled as such, unless `DEMO_AI=live` is set.
   Defaulting to live would mean an open URL billing someone's key for every question asked of it.
 - **Everything else is the real product.** Faking at the API seam rather than at the route handlers

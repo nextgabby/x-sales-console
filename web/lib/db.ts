@@ -79,11 +79,9 @@ export function ensureSchema(): Promise<void> {
           PRIMARY KEY (user_id, account_id)
         );
 
-        CREATE TABLE IF NOT EXISTS favorites (
-          user_id    text NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-          account_id text NOT NULL,
-          PRIMARY KEY (user_id, account_id)
-        );
+        -- A favorites table was created here until the feature was removed. Deliberately not
+        -- dropped: an existing deployment keeps its rows, unread, rather than this bootstrap
+        -- destroying data on the deploy that happens to run it.
 
         CREATE TABLE IF NOT EXISTS ai_config (
           user_id  text PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,

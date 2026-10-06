@@ -61,7 +61,6 @@ status() { curl -s -o /dev/null -w '%{http_code}' "$@" }
 as_alice() { curl -s -H "Cookie: x_ads_session=$ALICE_COOKIE" "$@" }
 code_as() { curl -s -o /dev/null -w '%{http_code}' -H "Cookie: x_ads_session=$1" "${@:2}" }
 
-print -r -- '{"accountId":"18ce0000777"}' > /tmp/h-fav.json
 print -r -- '{"consumerKey":"x","consumerSecret":"y"}' > /tmp/h-keys.json
 
 echo "== the deployment reports itself correctly =="
@@ -89,7 +88,7 @@ print('verify-consumer-secret' not in body and 'alice_sales-secret' not in body)
 ")"
 
 echo "== without a session, nothing is readable =="
-for ROUTE in /api/accounts /api/favorites /api/spy /api/ai/key; do
+for ROUTE in /api/accounts /api/spy /api/ai/key; do
   check "$ROUTE refuses an anonymous request" "$(python3 -c "print('$(status "$B$ROUTE")' == '401')")"
 done
 # The local tool signs the only stored user in automatically. On a shared host that would hand the
@@ -100,35 +99,34 @@ print('$(status "$B/api/accounts")' == '401')
 
 echo "== a forged cookie is rejected =="
 check "a bad signature does not authenticate" "$(python3 -c "
-print('$(code_as "$FORGED_COOKIE" "$B/api/favorites")' == '401')
+print('$(code_as "$FORGED_COOKIE" "$B/api/spy")' == '401')
 ")"
 check "neither does a truncated cookie" "$(python3 -c "
-print('$(code_as 'bm90aGluZw' "$B/api/favorites")' == '401')
+print('$(code_as 'bm90aGluZw' "$B/api/spy")' == '401')
 ")"
 
 echo "== the allowlist is enforced on every request, not just at login =="
 check "alice, who is listed, is allowed through" "$(python3 -c "
-print('$(code_as "$ALICE_COOKIE" "$B/api/favorites")' == '200')
+print('$(code_as "$ALICE_COOKIE" "$B/api/spy")' == '200')
 ")"
 # Bob's cookie is genuinely signed and his record is in the database. Only the allowlist stops him.
 check "bob, with a valid cookie but no listing, is refused" "$(python3 -c "
-print('$(code_as "$BOB_COOKIE" "$B/api/favorites")' == '401')
+print('$(code_as "$BOB_COOKIE" "$B/api/spy")' == '401')
 ")"
 
 echo "== per-rep data stays separate over http =="
-check "alice's favourite is hers alone" "$(
-curl -s -H "Cookie: x_ads_session=$ALICE_COOKIE" -X POST "$B/api/favorites" \
-  -H 'content-type: application/json' --data @/tmp/h-fav.json > /tmp/h-fav-alice.json
+check "alice's advertiser is hers alone" "$(
+as_alice "$B/api/spy" > /tmp/h-spy-alice.json
 python3 -c "
 import json
-d=json.load(open('/tmp/h-fav-alice.json'))
-print('18ce0000777' in d['favorites'])
+d=json.load(open('/tmp/h-spy-alice.json'))
+print(any(g['accountId'] == '18ce0000777' for g in d['spyGrants']))
 "
 )"
 check "and is invisible to the other rep's record in the database" "$(python3 -c "
 import subprocess
 out=subprocess.run(['psql','-p','$PGPORT','-d','$DB','-tAc',
-  \"select coalesce(string_agg(account_id,','),'') from favorites where user_id='222222222222'\"],
+  \"select coalesce(string_agg(account_id,','),'') from spy_grants where user_id='222222222222'\"],
   capture_output=True,text=True).stdout.strip()
 print(out == '')
 ")"
@@ -148,7 +146,7 @@ print('x_ads_session=;' in h.replace(' ','') or 'max-age=0' in h or 'expires=thu
 )"
 # Disconnect deletes the stored user, so the same cookie must no longer resolve to anyone.
 check "the same cookie no longer authenticates afterwards" "$(python3 -c "
-print('$(code_as "$ALICE_COOKIE" "$B/api/favorites")' == '401')
+print('$(code_as "$ALICE_COOKIE" "$B/api/spy")' == '401')
 ")"
 
 echo "== nothing reached the network =="

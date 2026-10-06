@@ -26,13 +26,9 @@ type AccountSummary = {
 export function AccountCard({
   account,
   limiter,
-  isFavorite,
-  onToggleFavorite,
 }: {
   account: AccountRef;
   limiter: <T>(task: () => Promise<T>) => Promise<T>;
-  isFavorite: boolean;
-  onToggleFavorite: () => void;
 }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["summary", account.asUser ?? "direct", account.id],
@@ -66,24 +62,14 @@ export function AccountCard({
 
   return (
     <article className="rise group relative flex flex-col rounded-2xl border border-border bg-surface p-5 transition-colors hover:border-border-strong hover:bg-surface-2">
-      {/* Overlay link so the whole card is clickable while the star stays on top of it. */}
+      {/* Overlay link, so the whole card is clickable rather than just the title. */}
       <Link
         href={dashboardHref}
         aria-label={`Open ${account.name} dashboard`}
         className="absolute inset-0 z-10 rounded-2xl focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
       />
 
-      <button
-        onClick={onToggleFavorite}
-        aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
-        className={`absolute right-4 top-4 z-20 text-lg leading-none transition-colors ${
-          isFavorite ? "text-warn" : "text-muted/40 hover:text-muted"
-        }`}
-      >
-        {isFavorite ? "★" : "☆"}
-      </button>
-
-      <div className="pr-8">
+      <div>
         <h3 className="truncate text-base font-semibold text-ink" title={account.name}>
           {account.name}
         </h3>

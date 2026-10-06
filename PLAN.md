@@ -113,8 +113,8 @@ Local-first changes the shape here: no hosting, no SSO, no Postgres, and the AI 
 
 **On storage:** this started as Prisma and SQLite and ended up as plain encrypted files. Prisma's
 CLI would not install cleanly, `node:sqlite` is still flagged experimental on Node 23, and
-`better-sqlite3` needs native compilation. For a single-user app holding one connection record, a
-favorites list, and an append-only audit log, a database was buying nothing and costing install
+`better-sqlite3` needs native compilation. For a single-user app holding one connection record and
+an append-only audit log, a database was buying nothing and costing install
 reliability — which matters most in exactly the scenario where reps run this themselves. All reads
 and writes go through `lib/store.ts`, so a hosted deployment can swap in Postgres by editing one
 file.
@@ -169,7 +169,7 @@ granted directly, or by impersonating a given handle.
   groups stay collapsed until expanded.
 - Card grid: account name, advertiser handle, timezone, approval status, an impersonation badge
   when relevant, 7-day spend sparkline, and live and paused campaign counts.
-- Client-side search, pinned favorites, and per-group removal.
+- Client-side search and per-group removal.
 
 ## 5. Account dashboard
 
@@ -610,7 +610,7 @@ and timezone-aligned stats ranges.
 **Phase 1 — setup wizard and account picker. Built.** Three-step wizard (callback URL, consumer keys,
 authorize), the full 3-legged OAuth flow with replay protection, identity resolution, `/accounts`
 enrichment with advertiser handles, permissions, funding instruments, campaign counts and a 7-day
-spend sparkline, plus search, sort, favorites, and disconnect.
+spend sparkline, plus search, sort, and disconnect.
 *Verified against live accounts — see the status section below.*
 
 **Phase 2 — account dashboard. Built.** 7/14/30/90-day range in the URL, twelve KPI tiles with
@@ -879,8 +879,8 @@ What had to exist first, none of which was a hosting change:
   through every fetch, because a handle alone cannot be joined back to the record whose token signed
   the request. Audit rows deliberately do not cascade on user deletion: who looked at which
   advertiser has to outlive their access.
-- **A migration.** Anyone already using the local tool had a connection, advertisers and favourites
-  in the flat pre-sessions layout. Without carrying those over, upgrading would have looked exactly
+- **A migration.** Anyone already using the local tool had a connection and advertisers in the flat
+  pre-sessions layout. Without carrying those over, upgrading would have looked exactly
   like data loss.
 
 Two decisions worth recording, both of which cut against the original per-rep instinct in §2:
@@ -901,10 +901,10 @@ than trusted from the cookie, so removing someone takes effect on their next cli
 denies everyone: a half-configured deployment locks itself rather than opening itself.
 
 Verified by three scripts, each against a production build with the Ads API pointed at a dead port:
-`verify-hosted.sh` (19 assertions — two reps isolated, a valid cookie for an unlisted handle still
-refused, forged cookies rejected, no local fallback when hosted), `verify-local.sh` (19 — the
-migration preserves tokens, advertisers and favourites, and the cookie-free single-user path still
-works), and `verify-demo.sh` (27).
+`verify-hosted.sh` (18 assertions — two reps isolated, a valid cookie for an unlisted handle still
+refused, forged cookies rejected, no local fallback when hosted), `verify-local.sh` (18 — the
+migration preserves tokens and advertisers, and the cookie-free single-user path still
+works), and `verify-demo.sh` (25).
 
 ## 13. Demo mode
 

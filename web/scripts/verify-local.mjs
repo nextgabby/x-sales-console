@@ -3,8 +3,7 @@
  *
  * Run through `verify-local.sh`, which points DATA_DIR at a throwaway copy of a real installation.
  * The thing being proved is that someone who was already using the console locally keeps their
- * authorization, their advertisers and their favourites — a silent reset there would look exactly
- * like data loss.
+ * authorization and their advertisers — a silent reset there would look exactly like data loss.
  *
  *   node --import ./scripts/ts-hook.mjs scripts/verify-local.mjs
  */
@@ -15,7 +14,6 @@ import { isHosted } from "../lib/db.ts";
 import {
   consumerCredentials,
   listUsers,
-  readFavorites,
   readSpyGrants,
   resolveCredentials,
 } from "../lib/store/index.ts";
@@ -71,9 +69,6 @@ check(
   "with their handles intact",
   grants.every((grant) => grant.asUser && grant.accountId && grant.timezone),
 );
-
-const favorites = await readFavorites(user.userId);
-check("favourites carried over", favorites.length === expected.favoriteCount);
 
 console.log("== it does not run twice ==");
 check("a marker records that the move happened", existsSync(join(DATA_DIR, ".migrated")));

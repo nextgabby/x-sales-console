@@ -6,9 +6,8 @@ import { DEMO_ACCOUNTS } from "./universe";
  *
  * A demo deployment stores nothing. There are no credentials to encrypt, no connection to persist
  * and no key material to manage, which also means it runs on a host with a read-only or ephemeral
- * filesystem and needs no database. Favourites are the one piece of visitor state, and they live in
- * a cookie (`lib/demo/favorites.ts`) rather than here — server memory would be shared between every
- * reviewer looking at the link at the same time.
+ * filesystem and needs no database. There is no visitor state at all: a demo link is opened by
+ * several reviewers at once, and anything held server-side would be shared between all of them.
  */
 
 export const DEMO_USER: StoredUser = {

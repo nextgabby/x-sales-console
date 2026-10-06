@@ -75,8 +75,8 @@ export const postgresBackend: StoreBackend = {
   },
 
   async deleteUser(userId) {
-    // Grants, favourites and the AI key cascade; the audit trail deliberately does not, because a
-    // record of who read whose data must outlive the access itself.
+    // Grants and the AI key cascade; the audit trail deliberately does not, because a record of who
+    // read whose data must outlive the access itself.
     await query(`DELETE FROM users WHERE user_id = $1`, [userId]);
   },
 
@@ -96,23 +96,6 @@ export const postgresBackend: StoreBackend = {
     );
     const row = rows[0];
     return row ? { token: row.token, tokenSecret: row.token_secret } : null;
-  },
-
-  async listFavorites(userId) {
-    const rows = await query<{ account_id: string }>(
-      `SELECT account_id FROM favorites WHERE user_id = $1 ORDER BY account_id`,
-      [userId],
-    );
-    return rows.map((row) => row.account_id);
-  },
-
-  async putFavorites(userId, accountIds) {
-    await query(`DELETE FROM favorites WHERE user_id = $1`, [userId]);
-    if (accountIds.length === 0) return;
-    await query(
-      `INSERT INTO favorites (user_id, account_id) SELECT $1, unnest($2::text[])`,
-      [userId, accountIds],
-    );
   },
 
   async listSpyGrants(userId) {

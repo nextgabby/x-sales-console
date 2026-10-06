@@ -1,6 +1,16 @@
 node_modules/
 dist/
-.env
+
+# Every env file, not just `.env`: `.env.local` and `.env.production` hold the same keys and were
+# not covered before. The example is the one exception, and carries no values.
+.env*
+!.env.example
+
+# The local store's master key and any copy of it. It decrypts the stored OAuth tokens, so it is
+# the one file here that must never be committed even by accident.
+*.key
+master.key
+
 as-user.config.json
 *.log
 .DS_Store

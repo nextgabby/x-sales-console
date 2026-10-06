@@ -821,7 +821,19 @@ x.com.
    team-owned app, so a rep signs in with nothing but their X account and the setup wizard
    disappears entirely. The launcher still uses the rep's own app, where pasting keys is reasonable
    because they also control the callback URL.
-4. **Vertical benchmarks — parked pending input from sales.** Asked for after the account-history
+4. **Confirm the team app's user OAuth token limit before rollout.** Apps approved for Ads API
+   access before July 2023 may be capped at five user tokens. The hosted build (§12) issues one per
+   rep, so a cap of five would stop a sales team outright, and it is not something the code can work
+   around — raising it goes through the X representative. Two related ordering facts: Ads API access
+   is approved per App ID and does not inherit from an existing app, and tokens minted before that
+   approval must be regenerated, so approval has to land before reps sign in or everyone authorizes
+   twice.
+5. **Surface each account's ad-account role.** `authenticated_user_access` is already fetched and its
+   `permissions` array already reaches the account payload, but nothing displays it. Access is
+   decided by probing the campaigns call, which 403s identically whether a spy grant lapsed or the
+   rep's role is too low for analytics. Showing the role would separate those two, and needs no new
+   API call.
+6. **Vertical benchmarks — parked pending input from sales.** Asked for after the account-history
    benchmark shipped: "something more centralized, able to filter by vertical and campaign
    objective", to replace the tooling lost in the adstack migration and the hand-kept spreadsheet
    verticals quote from. Three things have to be settled by sales before this can be built, and two

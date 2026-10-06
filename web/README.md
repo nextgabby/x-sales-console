@@ -36,6 +36,74 @@ The setup wizard walks through three steps:
 Nobody shares credentials. Every Ads API request is signed with your own consumer key and your own
 user token, so you see exactly the accounts you have been granted and nothing else.
 
+## Setting up the developer app
+
+Create the app at [console.x.com](https://console.x.com). Whether it is one rep's own app for the
+launcher or the team app for the hosted build, the settings are the same:
+
+| Setting | Value |
+|---|---|
+| App permissions (OAuth 1.0a) | **Read and write** |
+| Type of app | **Web App** — confidential client |
+| Ads API access tier | **Standard Access** |
+| Callback URL | `https://<your-service>/api/auth/callback`, or `http://127.0.0.1:3000/api/auth/callback` locally |
+
+**Read and write, even though this console only reads.** The one read-only Ads tier is the legacy
+*Analytics (Read-only)* level, and it cannot reach Campaign Management or Creative endpoints. This app
+needs both: `campaigns`, `line_items`, `funding_instruments`, `promotable_users`, `promoted_tweets` and
+`tweet_previews`, alongside the analytics endpoints. So Standard Access is the tier, and it is read &
+write.
+
+The consequence is worth stating plainly rather than discovering later: every rep's token is
+*capable* of posting and of editing campaigns. This app never does — there are no write paths in it
+at all, by design (`PLAN.md` §8) — but the capability is in the token, so the audit log is what makes
+that claim checkable rather than merely stated.
+
+**The "type of app" field is an OAuth 2.0 setting.** The Ads REST API requires OAuth 1.0a
+three-legged, which is what this app implements, so that selector does not govern sign-in here. Web
+App is still the right answer: this is a server-side app that can hold a secret.
+
+### Ads API access is a separate approval, per app
+
+Creating the app only grants basic X API access. Ads API access is then requested for that specific
+App ID through the [Ads API Access Form](https://docs.x.com/forms/ads-api-access). An existing app's
+approval does not extend to a newly created one, so the team app needs its own.
+
+Two things about ordering, both of which cost real time if missed:
+
+- **Get approved before anyone signs in.** Access tokens minted before the app is approved do not
+  work against the Ads API and have to be regenerated, meaning everyone authorizes twice.
+- **Check the user token limit.** Apps that requested Ads API access before July 2023 may be capped
+  at five user OAuth tokens. The hosted build issues one token per rep, so a cap of five would stop a
+  sales team outright. Raising it goes through your X representative; confirm it before rollout
+  rather than after.
+
+### Callback URLs
+
+They must match exactly, including any trailing slash, and X accepts `127.0.0.1` but not `localhost`.
+An app allows up to ten, so one app can serve both the hosted deployment and local development — add
+the Render URL and `http://127.0.0.1:3000/api/auth/callback` together.
+
+When one is missing or misspelled, the handshake fails with `code 415`,
+`"Callback URL not approved for this client application."`
+
+### What each rep can actually see
+
+The app permission sets the ceiling; the rep's role on each ad account sets what they really get.
+Roles are granted at **business.x.com** — Account administrator, Ad manager, Campaign analyst,
+Organic analyst, Creative Manager — and `Campaign analyst` is sufficient for read-only analytics.
+
+The console fetches each account's role from `authenticated_user_access`, which is the documented way
+to determine it, and carries the `permissions` array through to the account payload. Nothing displays
+it yet: whether an account opens is decided by probing the campaigns call, which is what actually
+403s on a lapsed grant or an insufficient role. That works, but it cannot distinguish "your grant
+expired" from "your role is too low" — so showing the role would be a genuine improvement, and the
+data is already there to do it.
+
+Adding an advertiser by handle is the pattern X documents as *obtaining your developer access token*:
+the advertiser grants the rep's @username access to their ad account, and the rep's own OAuth token
+then reads it. It is the supported route, not a workaround.
+
 ## Where your data lives
 
 Everything is written to `~/.x-ads-sales-console/` with `0600` permissions:

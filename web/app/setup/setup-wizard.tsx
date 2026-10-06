@@ -78,7 +78,7 @@ export function SetupWizard() {
       {data.isConnected ? (
         <>
           <ConnectedPanel data={data} onContinue={() => router.push("/accounts")} />
-          <GrokKey />
+          <GrokKey hosted={data.hosted} />
         </>
       ) : data.hosted ? (
         <HostedSignIn data={data} />

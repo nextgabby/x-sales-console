@@ -16,7 +16,11 @@ type AiStatus = {
   models?: string[];
 };
 
-export function GrokKey() {
+/**
+ * `hosted` only changes wording, but the wording was wrong without it: a rep on the shared
+ * deployment has no `.env.local` to edit and no machine of their own for a key to be encrypted on.
+ */
+export function GrokKey({ hosted }: { hosted: boolean }) {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["ai-key"],
     queryFn: async () => {
@@ -66,6 +70,8 @@ export function GrokKey() {
 
   if (isLoading) return null;
 
+  const fromEnv = data?.source === "env";
+
   return (
     <section id="grok" className="rounded-2xl border border-border bg-surface p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -80,29 +86,55 @@ export function GrokKey() {
       </div>
 
       <p className="mt-1.5 text-sm leading-relaxed text-muted">
-        Optional. With your own{" "}
-        <a
-          className="underline hover:text-ink"
-          href="https://console.x.ai"
-          target="_blank"
-          rel="noreferrer"
-        >
-          xAI API key
-        </a>
-        , the compare view can write a summary and answer questions about the campaigns you
-        selected. Paste it below, or set <code className="font-mono">XAI_API_KEY</code> in{" "}
-        <code className="font-mono">.env.local</code> to skip the form. A pasted key is encrypted on
-        this machine; either way it is only ever sent to xAI.
+        {fromEnv ? (
+          <>
+            Optional, and already set up. In the compare view, Grok can write a summary and answer
+            questions about the campaigns you selected. The key comes from{" "}
+            <code className="font-mono">XAI_API_KEY</code>
+            {hosted ? (
+              <>, set on this deployment and shared by everyone using it.</>
+            ) : (
+              <>
+                {" "}
+                in <code className="font-mono">.env.local</code>.
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            Optional. With your own{" "}
+            <a
+              className="underline hover:text-ink"
+              href="https://console.x.ai"
+              target="_blank"
+              rel="noreferrer"
+            >
+              xAI API key
+            </a>
+            , the compare view can write a summary and answer questions about the campaigns you
+            selected. Paste it below.{" "}
+            {hosted
+              ? "It is encrypted and stored against your account, so it is yours alone."
+              : "It is encrypted on this machine."}{" "}
+            It is only ever sent to xAI.
+          </>
+        )}
       </p>
 
       {data?.configured ? (
         <div className="mt-4 space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <code className="font-mono text-xs text-muted">{data.keyPreview}</code>
-            {data.source === "env" ? (
+            {fromEnv ? (
               <span className="text-xs text-muted">
-                from <code className="font-mono">XAI_API_KEY</code> · change it in{" "}
-                <code className="font-mono">.env.local</code> and restart
+                from <code className="font-mono">XAI_API_KEY</code> ·{" "}
+                {hosted ? (
+                  <>changing it means editing the environment variables on the deployment</>
+                ) : (
+                  <>
+                    change it in <code className="font-mono">.env.local</code> and restart
+                  </>
+                )}
               </span>
             ) : (
               <Button variant="ghost" onClick={remove}>
@@ -114,8 +146,8 @@ export function GrokKey() {
           {data.storedKeyShadowed ? (
             <Callout tone="warn">
               A key saved here is being ignored because <code className="font-mono">XAI_API_KEY</code>{" "}
-              is set. Remove that variable and restart to use the saved key, or remove the saved key
-              to avoid the ambiguity.
+              is set. Remove that variable from the environment to use the saved key, or remove the
+              saved key to avoid the ambiguity.
               <span className="mt-2 block">
                 <Button variant="ghost" onClick={remove}>
                   Remove saved key

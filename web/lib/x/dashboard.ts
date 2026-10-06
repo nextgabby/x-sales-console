@@ -359,11 +359,26 @@ export async function buildDashboard(options: {
   const lastCompleteDay = localDate(1, account.timezone);
   const lookbackFloor = localDate(MAX_FLIGHT_LOOKBACK_DAYS, account.timezone);
 
+  /**
+   * Which flights are worth buying spend history for.
+   *
+   * This backfill is by far the most expensive thing the dashboard does, and synchronous analytics
+   * is capped at 250 requests per 15 minutes across the whole category — not per account. Asking
+   * for every budgeted flight meant 92 days of daily spend for 73 campaigns on one account, 56
+   * requests, of which 55 described flights that had already closed, the oldest in 2020. Two
+   * dashboard loads exhausted the window and the third came back rate limited.
+   *
+   * An open flight is the case pacing exists for. A flight that closed inside the window still
+   * earns its history, because its row is on screen and the share of budget it finished on is the
+   * only thing that row has to say.
+   */
   const measurable = skipComparisons
     ? []
-    : [...flights.entries()].filter(
-        ([, flight]) => flight.totalBudget != null && flight.startTime && flight.endTime,
-      );
+    : [...flights.entries()].filter(([id, flight]) => {
+        if (flight.totalBudget == null || !flight.startTime || !flight.endTime) return false;
+        if (flight.endTime.slice(0, 10) > lastCompleteDay) return true;
+        return spentInWindow.has(id);
+      });
   const earliestStart = measurable.reduce<string | null>((earliest, [, flight]) => {
     const start = flight.startTime!.slice(0, 10);
     return !earliest || start < earliest ? start : earliest;

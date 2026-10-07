@@ -131,6 +131,29 @@ out=subprocess.run(['psql','-p','$PGPORT','-d','$DB','-tAc',
 print(out == '')
 ")"
 
+echo "== labelling a campaign is gated like a read =="
+# Campaign labels are the one write a rep makes that other reps read, so the route carries its own
+# authorization. These assertions stop short of the Ads API check inside it: this deployment points
+# at a dead base on purpose, and every case below is refused before any upstream call.
+print -r -- '{"campaignId":"cmp-1","kind":"trend-genius"}' > /tmp/h-label.json
+print -r -- '{"campaignId":"cmp-1","kind":"whatever"}' > /tmp/h-label-bad.json
+print -r -- '{"kind":"trend-genius"}' > /tmp/h-label-empty.json
+post_label() { curl -s -o /dev/null -w '%{http_code}' -H "Cookie: x_ads_session=$1" -X POST "$B/api/accounts/18ce0000777/labels" -H 'content-type: application/json' --data @"$2" }
+check "an anonymous caller cannot label a campaign" "$(python3 -c "
+print('$(post_label '' /tmp/h-label.json)' == '401')
+")"
+# A label changes what every rep on the account sees, so an unlisted rep must not be able to set one
+# even though his cookie is genuinely signed.
+check "nor can a rep the allowlist has dropped" "$(python3 -c "
+print('$(post_label "$BOB_COOKIE" /tmp/h-label.json)' == '401')
+")"
+check "an unknown label kind is refused, not stored" "$(python3 -c "
+print('$(post_label "$ALICE_COOKIE" /tmp/h-label-bad.json)' == '400')
+")"
+check "and a label with no campaign is refused" "$(python3 -c "
+print('$(post_label "$ALICE_COOKIE" /tmp/h-label-empty.json)' == '400')
+")"
+
 echo "== app keys cannot be changed on a shared deployment =="
 check "/api/setup refuses to store consumer keys" "$(python3 -c "
 print('$(status -X POST "$B/api/setup" -H 'content-type: application/json' --data @/tmp/h-keys.json)' == '409')

@@ -294,6 +294,9 @@ export function DashboardView({ accountId }: { accountId: string }) {
           asUser={asUser}
           days={range}
           timezone={data.account.timezone}
+          label={
+            data.campaigns.find((row) => row.id === openCampaign)?.pacing.label ?? null
+          }
           onClose={() => setOpenCampaign(null)}
         />
       ) : null}

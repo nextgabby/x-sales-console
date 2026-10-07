@@ -95,6 +95,22 @@ export function ensureSchema(): Promise<void> {
          * anyone is identified. Two reps authorizing at the same moment would otherwise overwrite
          * each other's pending secret and both handshakes would fail.
          */
+        /*
+         * Keyed by ad account rather than by rep, and deliberately not cascading from users: how a
+         * campaign is bought is a fact about the advertiser's buy, so it is shared across the team
+         * and has to outlive whoever happened to record it. set_by is therefore a plain column and
+         * not a foreign key -- a rep leaving must not silently delete the labels that stop their
+         * accounts' trend buys being reported as behind pace.
+         */
+        CREATE TABLE IF NOT EXISTS campaign_labels (
+          account_id  text NOT NULL,
+          campaign_id text NOT NULL,
+          kind        text NOT NULL,
+          set_by      text,
+          set_at      timestamptz NOT NULL DEFAULT now(),
+          PRIMARY KEY (account_id, campaign_id)
+        );
+
         CREATE TABLE IF NOT EXISTS pending_tokens (
           token        text PRIMARY KEY,
           token_secret text NOT NULL,

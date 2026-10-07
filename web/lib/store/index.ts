@@ -2,12 +2,33 @@ import { decryptSecret, encryptSecret, maskSecret } from "../crypto";
 import { isHosted } from "../db";
 import { DEFAULT_MODEL as FALLBACK_AI_MODEL } from "../grok";
 import { isDemoAiLive, isDemoMode } from "../demo/mode";
-import { DEMO_CREDENTIALS, DEMO_SPY_GRANTS, DEMO_USER } from "../demo/store";
+import {
+  DEMO_CAMPAIGN_LABELS,
+  DEMO_CREDENTIALS,
+  DEMO_SPY_GRANTS,
+  DEMO_USER,
+} from "../demo/store";
 import { deleteStoredAppKeys, fileBackend, readStoredAppKeys, writeStoredAppKeys } from "./files";
 import { postgresBackend } from "./postgres";
-import type { AiConfig, AuditEvent, SpyGrant, StoredUser, XCredentials } from "./types";
+import type {
+  AiConfig,
+  AuditEvent,
+  CampaignLabel,
+  CampaignLabelKind,
+  SpyGrant,
+  StoredUser,
+  XCredentials,
+} from "./types";
 
-export type { AiConfig, AuditEvent, SpyGrant, StoredUser, XCredentials } from "./types";
+export type {
+  AiConfig,
+  AuditEvent,
+  CampaignLabel,
+  CampaignLabelKind,
+  SpyGrant,
+  StoredUser,
+  XCredentials,
+} from "./types";
 
 /**
  * Every read and write goes through here, so the two deployments differ in one place.
@@ -197,6 +218,51 @@ export async function removeSpyHandleGroup(userId: string, asUser: string): Prom
   refuseInDemo();
   await backend().deleteSpyGrantsByHandle(userId, normalizeHandle(asUser));
   return backend().listSpyGrants(userId);
+}
+
+/* ------------------------------------------------------------------------------ campaign labels */
+
+/**
+ * How a campaign is bought, where the API cannot say and the pacing verdict depends on it.
+ *
+ * Shared across the team rather than held per rep: a Trend Genius buy is one for everybody, and one
+ * rep's correction should not leave their colleagues looking at the same false alarm. Returned as a
+ * map because every caller wants to ask "what is this campaign", not to iterate the list.
+ */
+export async function readCampaignLabels(
+  accountId: string,
+): Promise<Map<string, CampaignLabelKind>> {
+  const labels = isDemoMode()
+    ? DEMO_CAMPAIGN_LABELS.filter((label) => label.accountId === accountId)
+    : await backend().listCampaignLabels(accountId);
+  return new Map(labels.map((label) => [label.campaignId, label.kind]));
+}
+
+export async function listCampaignLabels(accountId: string): Promise<CampaignLabel[]> {
+  if (isDemoMode()) return DEMO_CAMPAIGN_LABELS.filter((l) => l.accountId === accountId);
+  return backend().listCampaignLabels(accountId);
+}
+
+export async function setCampaignLabel(params: {
+  accountId: string;
+  campaignId: string;
+  /** Null removes the label, so one route handles both. */
+  kind: CampaignLabelKind | null;
+  setBy: string | null;
+}): Promise<CampaignLabel[]> {
+  refuseInDemo();
+  if (params.kind == null) {
+    await backend().deleteCampaignLabel(params.accountId, params.campaignId);
+  } else {
+    await backend().putCampaignLabel({
+      accountId: params.accountId,
+      campaignId: params.campaignId,
+      kind: params.kind,
+      setBy: params.setBy,
+      setAt: new Date().toISOString(),
+    });
+  }
+  return backend().listCampaignLabels(params.accountId);
 }
 
 /* ------------------------------------------------------------------------------------- xai keys */

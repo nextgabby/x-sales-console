@@ -10,6 +10,7 @@ import {
   type CampaignPacing,
   type PacingStatus,
 } from "@/lib/x/pacing";
+import type { CampaignLabelKind } from "@/lib/store/types";
 import type { CampaignRow, PacingSummary } from "./types";
 
 /** How many rows show before the panel collapses the rest. */
@@ -41,14 +42,26 @@ const STATUS_TONE: Record<PacingStatus, "neutral" | "positive" | "warn" | "negat
   unknown: "neutral",
 };
 
+export const LABEL_NAME: Record<CampaignLabelKind, string> = {
+  "trend-genius": "Trend Genius",
+  notification: "Notification buy",
+};
+
 /** Statuses a rep should act on. Everything else is context, not a task. */
 const ACTIONABLE = new Set<PacingStatus>(["dark", "underpacing", "idle", "overpacing"]);
 
-function severity(pacing: CampaignPacing): number {
-  if (!ACTIONABLE.has(pacing.status)) return -1;
-  // Ordered by money at stake per day, so a big idle budget outranks a small shortfall.
+/**
+ * Ranked on two keys. Within a tier it is money at stake per day, so a big idle budget outranks a
+ * small shortfall. The tier exists for labelled campaigns: a trend buy is often the largest daily
+ * budget on the account and would otherwise head a panel of things to do today, having given up its
+ * claim to be one of them. It stays above the healthy rows, because the commitment may still go
+ * unspent, and sits below every campaign a rep can act on now.
+ */
+function severity(pacing: CampaignPacing): { tier: number; stake: number } {
+  if (!ACTIONABLE.has(pacing.status)) return { tier: 0, stake: 0 };
   // Overpacing stakes nothing but still belongs above the healthy rows.
-  return dailyStake(pacing) + (pacing.status === "overpacing" ? 0.01 : 0);
+  const stake = dailyStake(pacing) + (pacing.status === "overpacing" ? 0.01 : 0);
+  return { tier: pacing.label ? 1 : 2, stake };
 }
 
 export function PacingPanel({
@@ -72,7 +85,7 @@ export function PacingPanel({
      */
     .filter((row) => !row.dormant || ACTIONABLE.has(row.pacing.status))
     .map((row) => ({ row, score: severity(row.pacing) }))
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.score.tier - a.score.tier || b.score.stake - a.score.stake)
     .map(({ row }) => row);
 
   if (ranked.length === 0) return null;
@@ -184,7 +197,18 @@ function PacingRow({ row, currency }: { row: CampaignRow; currency: string | nul
           <span className="truncate text-sm font-medium text-ink" title={row.name}>
             {row.name}
           </span>
-          <Badge tone={STATUS_TONE[pacing.status]}>{STATUS_LABEL[pacing.status]}</Badge>
+          {/*
+            A labelled campaign shows how it is bought instead of a verdict. "Behind" measures a
+            daily rate the buy was never meant to hold, so on a trend or notification campaign it is
+            a false alarm, and a panel that cries wolf stops being read. The arithmetic is not
+            hidden: the line below still says what share of the budget is gone and what goes unspent
+            at this rate, and the shortfall is still counted in "Budget at risk" above.
+          */}
+          {pacing.label ? (
+            <Badge tone="accent">{LABEL_NAME[pacing.label]}</Badge>
+          ) : (
+            <Badge tone={STATUS_TONE[pacing.status]}>{STATUS_LABEL[pacing.status]}</Badge>
+          )}
         </div>
         <div className="nums shrink-0 text-xs text-muted">
           {pacing.basis === "flight" ? (
@@ -202,7 +226,11 @@ function PacingRow({ row, currency }: { row: CampaignRow; currency: string | nul
       </div>
 
       {pacing.basis === "flight" && pacing.elapsed != null && pacing.consumed != null ? (
-        <FlightBar consumed={pacing.consumed} elapsed={pacing.elapsed} status={pacing.status} />
+        <FlightBar
+          consumed={pacing.consumed}
+          elapsed={pacing.elapsed}
+          status={pacing.label ? null : pacing.status}
+        />
       ) : null}
 
       <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
@@ -221,6 +249,23 @@ function PacingRow({ row, currency }: { row: CampaignRow; currency: string | nul
  */
 function Advice({ advice, currency }: { advice: BudgetAdvice; currency: string | null }) {
   const required = formatCurrency(advice.requiredDaily, currency);
+
+  /**
+   * The only branch that recommends nothing. Every sentence below it is about a daily rate, and a
+   * rep has said this campaign does not run to one — it delivers when a trend or a notification
+   * fires. The shortfall is still named, because the committed money really may go unspent; what
+   * changes is that the lever is coverage rather than budget.
+   */
+  if (advice.lever === "coverage") {
+    return (
+      <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+        <span className="font-semibold text-ink">Budget is not the lever here.</span> This buy
+        delivers in bursts, so the gaps are expected and the {required} a day that would finish the
+        flight is a rate it was never meant to hold. If the commitment matters, the question is how
+        often it is being triggered.
+      </p>
+    );
+  }
 
   if (advice.lever === "fix-delivery") {
     return (
@@ -270,16 +315,19 @@ function FlightBar({
 }: {
   consumed: number;
   elapsed: number;
-  status: PacingStatus;
+  /** Null colours the bar as a plain measurement, for a buy whose pace is not a verdict. */
+  status: PacingStatus | null;
 }) {
   const fill = Math.min(100, consumed * 100);
   const marker = Math.min(100, elapsed * 100);
   const tone =
-    status === "underpacing"
-      ? "bg-negative"
-      : status === "overpacing"
-        ? "bg-warn"
-        : "bg-positive";
+    status === null
+      ? "bg-ink/40"
+      : status === "underpacing"
+        ? "bg-negative"
+        : status === "overpacing"
+          ? "bg-warn"
+          : "bg-positive";
 
   return (
     <div className="relative mt-2 h-1.5 w-full rounded-full bg-surface-2">
@@ -323,7 +371,11 @@ function explain(pacing: CampaignPacing, currency: string | null): string {
           currency,
         )} goes unspent.`;
       }
-      return rate;
+      /**
+       * "Recent spend is 0% of the daily budget" is the one line in this panel that reads as an
+       * outage, and on a labelled buy between bursts it is the expected state.
+       */
+      return pacing.label ? `${rate} It delivers in bursts, so a quiet stretch is expected.` : rate;
     case "overpacing":
       return `${formatPercent(pacing.consumed ?? 0, 0)} of budget spent with ${formatPercent(
         pacing.elapsed ?? 0,

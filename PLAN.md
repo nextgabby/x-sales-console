@@ -301,6 +301,38 @@ have quoted a figure *below* the current cap — advice to cut the budget of a c
 Past a 3x lift the recommendation is suppressed too, since tripling a spend rate for the days left is a
 conversation about the commitment rather than an edit.
 
+**Buys that are meant to be intermittent are labelled by hand, because the API will not say.** Two
+kinds of campaign deliver in bursts by design: Trend Genius, which fires when a matching trend does,
+and notification buys, which fire when there is something to notify subscribers about. Pacing judges
+every campaign against a daily rate, so both read as behind pace between bursts and, if a burst is
+far enough back, as campaigns that *stopped delivering* — the loudest thing the panel says.
+
+There is no field to detect this with. Novig's Trend Genius comes back as
+`product_type: PROMOTED_TWEETS`, `objective: REACH`, `placements: ALL_ON_TWITTER`: byte for byte an
+ordinary reach buy. Call of Duty's notification campaigns are `objective: ENGAGEMENTS` promoted
+posts. The only difference is in the delivery pattern, and that is exactly what makes the difference
+between a trend buy working as sold and a standard campaign in trouble, so inferring one from the
+other would swap a false alarm for a silent failure. The names are no better: "Like to Subscribe"
+and "Trend Genius — Summer Peaks" are conventions, not data, and the campaigns most at risk of being
+misread are the ones nobody renamed.
+
+So the rep says which it is, from the campaign drawer, and the label is **shared across the whole
+sales team** rather than held per rep. How a campaign is bought is a fact about the advertiser's
+buy, not one rep's opinion of it; per-rep labels would mean every rep re-labelling the same
+campaigns and the same row reading differently depending on who opened it. The label outlives
+whoever recorded it, too — it is deliberately not cascaded from the user record, since a rep leaving
+must not silently restore the false alarms on their accounts.
+
+What a label changes is the alarm, not the arithmetic. The row shows how the campaign is bought
+instead of a verdict, the bar loses its colour, and the budget recommendation is replaced by a line
+saying that budget is not the lever and the question is how often the buy is being triggered. It is
+also dropped from the "stopped delivering" and "never delivered" counts, so a quiet trend buy stops
+appearing in the list of things worth checking today. What stays is the money: the shortfall is still
+named on the row and still counted in **Budget at risk**, because a commitment that is not being
+triggered often enough really may go unspent, and that is a conversation to have with the client
+rather than something to hide. The Grok prompt is told the same thing, and forbidden from
+recommending a budget change on a labelled campaign.
+
 ## 5b. Creative performance
 
 **Built.** Per-creative metrics in the campaign drawer, from `entity=PROMOTED_TWEET`, which answers

@@ -1,5 +1,5 @@
-import type { SpyGrant, StoredUser, XCredentials } from "../store/types";
-import { DEMO_ACCOUNTS } from "./universe";
+import type { CampaignLabel, SpyGrant, StoredUser, XCredentials } from "../store/types";
+import { DEMO_ACCOUNTS, entityId } from "./universe";
 
 /**
  * Stands in for everything the real store would hold.
@@ -46,3 +46,21 @@ export const DEMO_SPY_GRANTS: SpyGrant[] = DEMO_ACCOUNTS.filter(
   approvalStatus: "ACCEPTED",
   addedAt: "2026-01-05T16:04:00Z",
 }));
+
+/**
+ * One of the two bursty campaigns is labelled and the other is not, deliberately.
+ *
+ * A demo stores nothing, so a reviewer cannot set a label themselves and see what changes. Shipping
+ * one of each puts both states on screen instead: Harborline's trend buy reads as intermittent by
+ * design, and Lumen's notification campaign is still being reported as behind pace, which is the
+ * problem the label exists to fix.
+ */
+export const DEMO_CAMPAIGN_LABELS: CampaignLabel[] = [
+  {
+    accountId: "18ce5dem0002",
+    campaignId: entityId("c", "18ce5dem0002:trend-genius"),
+    kind: "trend-genius",
+    setBy: DEMO_USER.handle,
+    setAt: "2026-01-06T09:12:00Z",
+  },
+];

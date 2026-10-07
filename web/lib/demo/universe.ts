@@ -94,6 +94,19 @@ export type DemoCampaign = {
     followRate: number;
     /** Scales delivery down, for a campaign that is not spending its budget. */
     delivery: number;
+    /**
+     * Share of days the campaign delivers at all. Null is every day, which is how an ordinary buy
+     * behaves; a fraction makes it burst, which is how a trend-triggered or notification buy
+     * behaves and the reason campaign labels exist.
+     */
+    burstRate: number | null;
+    /**
+     * Days ago the campaign last delivered, while still live and funded. Null is "up to yesterday",
+     * which is every ordinary campaign. A number produces the `dark` case — live, holding budget,
+     * spending nothing — which is the loudest verdict pacing issues and the one the generated
+     * universe could not previously reach, since delivery otherwise runs to the present day.
+     */
+    darkSince: number | null;
   };
   lineItems: DemoLineItem[];
 };
@@ -131,6 +144,10 @@ type CampaignSpec = {
   installRate?: number;
   followRate?: number;
   delivery?: number;
+  /** Share of days the campaign delivers at all; below 1 it bursts. See `profile.burstRate`. */
+  burstRate?: number;
+  /** Days ago it last delivered, while still live and funded. See `profile.darkSince`. */
+  darkSince?: number;
   /**
    * Share of the daily cap the campaign actually spends. Budgets are derived from delivery rather
    * than written down, because a hand-picked budget beside a hand-picked impression volume almost
@@ -252,6 +269,8 @@ function buildCampaign(accountId: string, spec: CampaignSpec): DemoCampaign {
       installRate: spec.installRate ?? 0,
       followRate: spec.followRate ?? 0,
       delivery,
+      burstRate: spec.burstRate ?? null,
+      darkSince: spec.darkSince ?? null,
     },
     lineItems,
   };
@@ -274,6 +293,13 @@ const LUMEN: CampaignSpec[] = [
   { key: "brand-reach", name: "Brand Reach — Launch Week", objective: "REACH", startDaysAgo: 46, dailyImpressions: 540_000, cpm: 4.6, ctr: 0.0031 },
   { key: "brand-reach-2", name: "Brand Reach — Sustain", objective: "REACH", startDaysAgo: 33, dailyImpressions: 300_000, cpm: 5.4, ctr: 0.0027 },
   { key: "engage", name: "Community Engagement", objective: "ENGAGEMENTS", startDaysAgo: 58, dailyImpressions: 150_000, cpm: 6.1, ctr: 0.0064, engagementRate: 0.027 },
+  /**
+   * A subscription notification buy: it fires when there is something to notify subscribers about,
+   * so it delivers on roughly two days in five and reads as behind pace against a flight that
+   * assumes every day. Nothing in its name or its API fields says what it is — the objective is the
+   * same `ENGAGEMENTS` as the campaign above it — which is exactly why a rep has to label it.
+   */
+  { key: "subs-notify", name: "Drop Alerts — Subscribers", objective: "ENGAGEMENTS", startDaysAgo: 44, endDaysAgo: -22, totalBudgetMultiple: 1, burstRate: 0.4, darkSince: 9, dailyImpressions: 180_000, cpm: 7.4, ctr: 0.0071, engagementRate: 0.031 },
 ];
 
 /**
@@ -298,6 +324,19 @@ const HARBORLINE: CampaignSpec[] = [
    */
   { key: "city-video", name: "City Breaks — Video", objective: "VIDEO_VIEWS", startDaysAgo: 30, endDaysAgo: -14, totalBudgetMultiple: 1.4, capUse: 0.34, dailyImpressions: 260_000, cpm: 4.4, ctr: 0.0051, viewRate: 0.41 },
   { key: "takeover", name: "Takeover", objective: "REACH", startDaysAgo: 30, endDaysAgo: 29, describable: false, dailyImpressions: 21_000_000, cpm: 2.2, ctr: 0.0009 },
+  /**
+   * A Trend Genius buy, which only delivers on days a matching trend actually fires — modelled on
+   * the live one that prompted the feature, where 19 of 28 possible days delivered across four
+   * separate bursts while the account's two ordinary campaigns ran all 28 contiguously. Half its
+   * flight consumed against a flight that assumes every day, so it reads as behind pace until the
+   * rep labels it.
+   *
+   * It has also not been triggered for nine days, which is the other half of the problem: without
+   * its label this would be reported as a campaign that stopped delivering and is "worth checking
+   * today". The Lumen notification campaign is the same shape left unlabelled, so the demo carries
+   * both the fixed case and the broken one.
+   */
+  { key: "trend-genius", name: "Trend Genius — Summer Peaks", objective: "REACH", startDaysAgo: 40, endDaysAgo: -20, totalBudgetMultiple: 1, burstRate: 0.5, darkSince: 9, dailyImpressions: 430_000, cpm: 5, ctr: 0.0022 },
 ];
 
 /**
@@ -502,6 +541,19 @@ export function postDayMetrics(
   if (end && date > end) return emptyDay();
   // Nothing has delivered in the future, whatever the flight says.
   if (date >= localDate(0, timeZone)) return emptyDay();
+
+  /**
+   * A trend-triggered or notification buy only delivers on the days something fires, which is the
+   * whole reason campaign labels exist. Keyed on the campaign and the date rather than the post, so
+   * every creative under it goes dark on the same days — half a campaign's creatives delivering on
+   * a day the campaign did not would not reconcile with anything.
+   */
+  const burst = campaign.profile.burstRate;
+  if (burst != null && noise(`${campaign.id}:${date}:burst`) > burst) return emptyDay();
+
+  // Live and funded, but it stopped delivering on this date and has not resumed.
+  const darkSince = campaign.profile.darkSince;
+  if (darkSince != null && date >= localDate(darkSince, timeZone)) return emptyDay();
 
   /**
    * The post's share of the whole campaign. Weights normalise to 1 at each level, so summing posts

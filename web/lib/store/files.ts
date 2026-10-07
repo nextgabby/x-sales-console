@@ -14,6 +14,7 @@ import type {
   AiConfig,
   AppKeys,
   AuditEvent,
+  CampaignLabel,
   PendingToken,
   SpyGrant,
   StoreBackend,
@@ -31,6 +32,7 @@ import type {
 const USERS_DIR = join(DATA_DIR, "users");
 const PENDING_DIR = join(DATA_DIR, "pending");
 const AUDIT_PATH = join(DATA_DIR, "audit.jsonl");
+const LABELS_PATH = join(DATA_DIR, "campaign-labels.json");
 
 /**
  * User ids come from X and are numeric, but they end up in a filesystem path, so they are checked
@@ -226,6 +228,33 @@ export const fileBackend: StoreBackend = {
 
   async deleteAiConfig(userId) {
     rmSync(userFile(userId, "ai.json"), { force: true });
+  },
+
+  /**
+   * Machine-wide rather than under a user directory, matching `app-keys.json`: these describe the
+   * advertiser's buy, not the rep. In local mode there is only ever one rep anyway, so the
+   * distinction costs nothing here and keeps the file in the same shape the hosted table is in.
+   */
+  async listCampaignLabels(accountId) {
+    return readJson<CampaignLabel[]>(LABELS_PATH, []).filter(
+      (label) => label.accountId === accountId,
+    );
+  },
+
+  async putCampaignLabel(label) {
+    ensureDir(DATA_DIR);
+    const all = readJson<CampaignLabel[]>(LABELS_PATH, []).filter(
+      (existing) =>
+        existing.accountId !== label.accountId || existing.campaignId !== label.campaignId,
+    );
+    writeJson(LABELS_PATH, [...all, label]);
+  },
+
+  async deleteCampaignLabel(accountId, campaignId) {
+    const all = readJson<CampaignLabel[]>(LABELS_PATH, []).filter(
+      (label) => label.accountId !== accountId || label.campaignId !== campaignId,
+    );
+    writeJson(LABELS_PATH, all);
   },
 
   async appendAudit(event) {

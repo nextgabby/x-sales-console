@@ -95,6 +95,42 @@ levers={(r['pacing'].get('advice') or {}).get('lever') for r in d['campaigns']}
 print('raise-budget' in levers and 'fix-delivery' in levers)
 ")"
 
+# The demo carries the same bursty shape twice: labelled on Harborline, left unlabelled on Lumen.
+# Both verdicts are asserted, because the label is only worth anything if the unlabelled case really
+# does raise the alarm the label suppresses.
+curl -s "$B/api/accounts/18ce5dem0002/dashboard?days=90" > /tmp/v-lab2.json
+curl -s "$B/api/accounts/18ce5dem0001/dashboard?days=90" > /tmp/v-lab1.json
+check "a labelled trend buy loses the alarm and the budget advice" "$(python3 -c "
+import json
+d=json.load(open('/tmp/v-lab2.json'))
+r=[r for r in d['campaigns'] if r['pacing']['label']=='trend-genius'][0]
+print(r['pacing']['advice']['lever']=='coverage')
+")"
+check "and keeps its shortfall in budget at risk" "$(python3 -c "
+import json
+d=json.load(open('/tmp/v-lab2.json'))
+r=[r for r in d['campaigns'] if r['pacing']['label']=='trend-genius'][0]
+short=r['pacing']['projectedShortfall']
+print(short>0 and d['pacing']['budgetAtRisk']>=short)
+")"
+check "nine quiet days are not reported as stopped" "$(python3 -c "
+import json
+d=json.load(open('/tmp/v-lab2.json'))
+r=[r for r in d['campaigns'] if r['pacing']['label']=='trend-genius'][0]
+print(r['pacing']['status'] not in ('dark','idle') and d['pacing']['dark']==0)
+")"
+check "the same shape unlabelled still reports stopped" "$(python3 -c "
+import json
+d=json.load(open('/tmp/v-lab1.json'))
+r=[r for r in d['campaigns'] if r['pacing']['status']=='dark']
+print(len(r)==1 and r[0]['pacing']['label'] is None and d['pacing']['darkDailyBudget']>0)
+")"
+print -r -- '{"campaignId":"x","kind":"trend-genius"}' > /tmp/v-body-label.json
+check "labelling is refused in demo mode" "$(
+S=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$B/api/accounts/18ce5dem0001/labels" -H 'content-type: application/json' --data @/tmp/v-body-label.json)
+python3 -c "print('$S' == '403')"
+)"
+
 echo "== takeover =="
 curl -s "$B/api/accounts/18ce5dem0002/dashboard?days=30&takeovers=1" > /tmp/v-tk.json
 check "takeover hidden by default, surfaced on request" "$(python3 -c "

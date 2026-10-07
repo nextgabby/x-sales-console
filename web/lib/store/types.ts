@@ -58,6 +58,27 @@ export type AiConfig = {
   savedAt: string;
 };
 
+/**
+ * How a campaign is bought, in the two cases the Ads API cannot express.
+ *
+ * Both deliver in bursts rather than continuously, so the pacing verdict reads them as behind or
+ * stopped when they are doing exactly what they were sold to do. Neither is identifiable from the
+ * API: a live Trend Genius campaign comes back as `PROMOTED_TWEETS` / `REACH` / `ALL_ON_TWITTER`,
+ * indistinguishable from an ordinary reach buy, and subscription notification campaigns are plain
+ * `ENGAGEMENTS`. Advertisers sometimes say so in the campaign name and often do not. So a rep says
+ * so instead.
+ */
+export type CampaignLabelKind = "trend-genius" | "notification";
+
+export type CampaignLabel = {
+  accountId: string;
+  campaignId: string;
+  kind: CampaignLabelKind;
+  /** The rep who set it, so a surprising label can be asked about rather than just overridden. */
+  setBy: string | null;
+  setAt: string;
+};
+
 export type AuditEvent = {
   at: string;
   userId: string | null;
@@ -93,6 +114,17 @@ export type StoreBackend = {
   getAiConfig(userId: string): Promise<AiConfig | null>;
   putAiConfig(userId: string, config: AiConfig): Promise<void>;
   deleteAiConfig(userId: string): Promise<void>;
+
+  /**
+   * Keyed by ad account, not by rep — the only thing on this interface that is, which is why it is
+   * called out here. How a campaign is bought is a fact about the campaign, not one rep's opinion
+   * of it, so one rep labelling a Trend Genius buy fixes the pacing verdict for everyone looking at
+   * that advertiser. The alternative, per-rep labels, means every rep re-labelling the same
+   * campaigns and a verdict that differs depending on who is looking at it.
+   */
+  listCampaignLabels(accountId: string): Promise<CampaignLabel[]>;
+  putCampaignLabel(label: CampaignLabel): Promise<void>;
+  deleteCampaignLabel(accountId: string, campaignId: string): Promise<void>;
 
   appendAudit(event: AuditEvent): Promise<void>;
   readAudit(options: { userId?: string; limit: number }): Promise<AuditEvent[]>;

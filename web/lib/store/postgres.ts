@@ -1,5 +1,5 @@
 import { db, ensureSchema } from "../db";
-import type { StoreBackend, StoredUser } from "./types";
+import type { CampaignLabelKind, StoreBackend, StoredUser } from "./types";
 
 /** The hosted backend. Every method bootstraps the schema first, so a cold database self-heals. */
 
@@ -179,6 +179,40 @@ export const postgresBackend: StoreBackend = {
 
   async deleteAiConfig(userId) {
     await query(`DELETE FROM ai_config WHERE user_id = $1`, [userId]);
+  },
+
+  async listCampaignLabels(accountId) {
+    const rows = await query<{
+      account_id: string;
+      campaign_id: string;
+      kind: string;
+      set_by: string | null;
+      set_at: Date;
+    }>(`SELECT * FROM campaign_labels WHERE account_id = $1`, [accountId]);
+    return rows.map((row) => ({
+      accountId: row.account_id,
+      campaignId: row.campaign_id,
+      kind: row.kind as CampaignLabelKind,
+      setBy: row.set_by,
+      setAt: row.set_at.toISOString(),
+    }));
+  },
+
+  async putCampaignLabel(label) {
+    await query(
+      `INSERT INTO campaign_labels (account_id, campaign_id, kind, set_by, set_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (account_id, campaign_id) DO UPDATE SET
+         kind = EXCLUDED.kind, set_by = EXCLUDED.set_by, set_at = EXCLUDED.set_at`,
+      [label.accountId, label.campaignId, label.kind, label.setBy, label.setAt],
+    );
+  },
+
+  async deleteCampaignLabel(accountId, campaignId) {
+    await query(`DELETE FROM campaign_labels WHERE account_id = $1 AND campaign_id = $2`, [
+      accountId,
+      campaignId,
+    ]);
   },
 
   async appendAudit(event) {

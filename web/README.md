@@ -138,6 +138,7 @@ Everything is written to `~/.x-ads-sales-console/` with `0600` permissions:
 | `users/<id>/connection.json` | Your tokens, secrets encrypted |
 | `users/<id>/spy-handles.json` | The advertisers you have added |
 | `users/<id>/ai.json` | Your xAI API key, encrypted, and the chosen model |
+| `campaign-labels.json` | How campaigns are bought, per advertiser — shared, not per rep |
 | `audit.jsonl` | Every advertiser data access: who, account, endpoint, timestamp |
 
 Set `DATA_DIR` to relocate it. **Disconnect** in Settings deletes the stored credentials; revoking
@@ -371,6 +372,7 @@ always quoting a figure:
 | `raise-budget` | Spending ≥90% of the cap, and the required rate is ≤3× it | Raise the daily budget to $X |
 | `fix-delivery` | Cap already permits the required rate | Budget is not the constraint; check bid and targeting |
 | `unrecoverable` | Cap is binding but the required rate is >3× it | Too far behind for a budget edit; revisit the end date or the commitment |
+| `coverage` | The campaign is labelled as a trend or notification buy | Budget is not the lever; the question is how often it is triggered |
 
 The `fix-delivery` case is the one that makes this worth guarding, and it is the only underpacing
 flight across the four accounts tested. Novig's Trend Genius has $259,254 left over 33 days, so it
@@ -387,6 +389,43 @@ The recommendation is passed to Grok through `summary-context.ts` as a pre-compu
 pacing status itself. In the `fix-delivery` case the context explicitly tells the model not to
 recommend raising the budget, because "how do I optimize this?" otherwise reliably produces exactly
 that advice.
+
+### Campaigns that are meant to deliver in bursts
+
+Trend Genius and subscription-notification buys deliver when something fires, not every day. Pacing
+measures a daily rate, so between bursts both read as behind pace, and after a long enough gap as
+`dark` — "stopped delivering", the loudest verdict the panel has.
+
+**Nothing in the API distinguishes them, and the delivery pattern is the wrong thing to guess
+from.** Novig's Trend Genius returns `product_type: PROMOTED_TWEETS`, `objective: REACH`,
+`placements: ALL_ON_TWITTER`, which is identical to an ordinary reach buy; Call of Duty's
+notification campaigns are `objective: ENGAGEMENTS` promoted posts. Intermittent delivery is the
+only observable difference, and it is also precisely what a genuinely broken campaign looks like, so
+auto-detection would trade a false alarm for a silent failure. Names do not help either: "Like to
+Subscribe" is a convention, and the campaigns most likely to be misread are the unrenamed ones.
+
+So a rep says which it is, from the campaign drawer, and `POST /api/accounts/:id/labels` stores it.
+
+**Labels are keyed by ad account, not by rep** — the only thing in the store that is. How a campaign
+is bought is a fact about the advertiser, so one rep labelling a Trend Genius buy fixes the verdict
+for everyone looking at that advertiser. They are also not cascaded from `users`: `set_by` is a plain
+column rather than a foreign key, because a rep leaving must not silently delete the labels that stop
+their accounts' trend buys being reported as behind pace. That inversion is what the hosted store
+suite's "campaign labels, shared on purpose" section exists to pin down.
+
+Because this is the one write a rep makes that other reps read, it is the one route that needs its own
+authorization. Everywhere else the Ads API is the gate — a rep without access gets a 403 from X and
+sees nothing — but nothing here touches the Ads API for its own sake, so the route first spends one
+`GET /accounts/:id/campaigns?campaign_ids=…&count=1` to apply exactly the gate X would have applied
+to a data read.
+
+A label changes the alarm, not the arithmetic. `computePacing()` skips the `dark`/`idle`
+short-circuit, swaps the lever to `coverage`, and the row shows how the campaign is bought instead of
+a status; the bar loses its colour and the row drops below everything still worth acting on. The
+spend share, the shortfall and **Budget at risk** all stay exactly as they were, because a commitment
+that is not being triggered often enough really may go unspent. Demo mode seeds the same bursty shape
+twice — labelled on Harborline, unlabelled on Lumen — so both verdicts are visible, and the demo suite
+asserts both.
 
 ## Versus the brand's own history
 

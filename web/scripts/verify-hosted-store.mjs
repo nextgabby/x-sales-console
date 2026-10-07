@@ -3,7 +3,8 @@
  *
  * Run through `verify-hosted.sh`, which supplies the database and the keys. This half covers what
  * HTTP cannot reach without a genuine OAuth handshake: that two reps' data stays apart, that
- * secrets are unreadable in the table, and that a request token cannot be replayed.
+ * campaign labels deliberately do not, that secrets are unreadable in the table, and that a request
+ * token cannot be replayed.
  *
  *   node --import ./scripts/ts-hook.mjs scripts/verify-hosted-store.mjs
  */
@@ -15,8 +16,10 @@ import {
   clearAiConfig,
   deleteUser,
   getUser,
+  listCampaignLabels,
   listUsers,
   readAudit,
+  readCampaignLabels,
   readSpyGrants,
   recordAudit,
   resolveCredentials,
@@ -24,6 +27,7 @@ import {
   savePendingRequestToken,
   saveSpyGrants,
   saveUser,
+  setCampaignLabel,
   takePendingRequestToken,
 } from "../lib/store/index.ts";
 import { checkHandle, allowedHandles } from "../lib/auth/allowlist.ts";
@@ -110,6 +114,30 @@ await saveAiConfig(ALICE, "xai-test-key-aaaaaaaaaaaaaaaa", "grok-4");
 const bobAi = await aiKeyStatus(BOB);
 check("an xAI key is not shared between reps", bobAi.configured === false, JSON.stringify(bobAi));
 await clearAiConfig(ALICE);
+
+/*
+ * Campaign labels run the other way to everything above, and that is the point of these checks.
+ * How a campaign is bought is a fact about the advertiser, not one rep's opinion, so Alice saying
+ * "this is a trend buy" has to fix the pacing verdict for Bob too — otherwise every rep re-labels
+ * the same campaigns and the same row reads differently depending on who opened it.
+ */
+console.log("== campaign labels, shared on purpose ==");
+const SHARED_ACCOUNT = "18ce0000001";
+await setCampaignLabel({
+  accountId: SHARED_ACCOUNT,
+  campaignId: "cmp-trend",
+  kind: "trend-genius",
+  setBy: "alice_sales",
+});
+const asBob = await readCampaignLabels(SHARED_ACCOUNT);
+check("one rep's label is visible to another", asBob.get("cmp-trend") === "trend-genius", JSON.stringify([...asBob]));
+const [onlyLabel] = await listCampaignLabels(SHARED_ACCOUNT);
+check("and records who set it, so a surprising label can be asked about", onlyLabel?.setBy === "alice_sales");
+check("labels do not leak to another advertiser", (await readCampaignLabels("18ce0000002")).size === 0);
+await setCampaignLabel({ accountId: SHARED_ACCOUNT, campaignId: "cmp-trend", kind: "notification", setBy: "bob_sales" });
+check("re-labelling replaces rather than duplicates", (await listCampaignLabels(SHARED_ACCOUNT)).length === 1);
+await setCampaignLabel({ accountId: SHARED_ACCOUNT, campaignId: "cmp-trend", kind: null, setBy: "bob_sales" });
+check("and a label can be taken off again", (await readCampaignLabels(SHARED_ACCOUNT)).size === 0);
 
 console.log("== secrets at rest ==");
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });

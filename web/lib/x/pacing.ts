@@ -10,6 +10,7 @@
  * perfectly on track.
  */
 import { dayDiff, microsToCurrency } from "./time";
+import type { CampaignLabelKind } from "../store/types";
 
 /** The line item fields pacing needs, as returned by `/line_items`. */
 export type LineItemBudget = {
@@ -70,8 +71,11 @@ export type BudgetAdvice = {
    *   the constraint is bid or targeting and more budget is wasted effort.
    * - `unrecoverable`: the cap is binding but the required rate is too far above it to credit as a
    *   budget change alone; the flight or the commitment is what needs revisiting.
+   * - `coverage`: the campaign is labelled as a buy that delivers in bursts, so a daily rate is not
+   *   the lever at all. Set in place of the other three rather than alongside them, because every
+   *   one of those sentences would be wrong advice on a trend or notification campaign.
    */
-  lever: "raise-budget" | "fix-delivery" | "unrecoverable";
+  lever: "raise-budget" | "fix-delivery" | "unrecoverable" | "coverage";
 };
 
 export type CampaignPacing = {
@@ -102,6 +106,15 @@ export type CampaignPacing = {
   basis: "flight" | "delivery" | "none";
   /** Only set for campaigns behind pace against a measurable flight. */
   advice: BudgetAdvice | null;
+  /**
+   * The rep's label for how this campaign is bought, when they have set one.
+   *
+   * Carried on the pacing result rather than looked up again by the UI, because every consumer of a
+   * verdict needs to know it: the badge tone, the explanation, the advice wording, and the headline
+   * counts all change. A verdict that travelled without it would be presented as an alarm by
+   * whichever consumer forgot to check.
+   */
+  label: CampaignLabelKind | null;
 };
 
 /** Outside this band a campaign is called off pace. */
@@ -254,6 +267,7 @@ const empty = (): CampaignPacing => ({
   status: "no-budget",
   basis: "none",
   advice: null,
+  label: null,
 });
 
 /**
@@ -272,12 +286,16 @@ export function computePacing(options: {
   lastCompleteDay: string;
   /** Campaign `entity_status`; a paused campaign should not get a live delivery verdict. */
   entityStatus: string | null;
+  /** The rep's label for how this campaign is bought, where they have set one. */
+  label?: CampaignLabelKind | null;
 }): CampaignPacing {
   const { flight, flightSpend, recentDailySpend, lastCompleteDay, entityStatus } = options;
-  if (!flight) return empty();
+  const label = options.label ?? null;
+  if (!flight) return { ...empty(), label };
 
   const result = {
     ...empty(),
+    label,
     dailyBudget: flight.dailyBudget,
     totalBudget: flight.totalBudget,
     flightStart: flight.startTime,
@@ -327,7 +345,14 @@ export function computePacing(options: {
    * delivered in the window is abandoned setup, and on a test-heavy account there can be dozens of
    * them, so conflating the two buries the urgent case under the trivial ones.
    */
-  if (live && flight.dailyBudget && activeDays.length === 0) {
+  /**
+   * A labelled campaign is exempt from both. "Was delivering, now spending nothing, worth checking
+   * today" is the single loudest thing this module says, and on a trend buy between bursts it is
+   * false every time — the gap *is* the product. These campaigns fall through to the flight
+   * measurement below instead, which still asks the question that matters: will the committed
+   * budget be spent by the end date. That is a question a trend buy really can fail.
+   */
+  if (!label && live && flight.dailyBudget && activeDays.length === 0) {
     const deliveredEarlier = recentDailySpend
       .slice(0, -DELIVERY_RATE_DAYS)
       .some((value) => value > 0);
@@ -379,15 +404,34 @@ export function computePacing(options: {
     basis: "flight",
     advice:
       status === "underpacing"
-        ? adviseBudget({
-            totalBudget: flight.totalBudget!,
-            flightSpend: flightSpend!,
-            daysRemaining,
-            dailyBudget: flight.dailyBudget,
-            deliveryRate: result.deliveryRate,
-          })
+        ? withLabel(
+            adviseBudget({
+              totalBudget: flight.totalBudget!,
+              flightSpend: flightSpend!,
+              daysRemaining,
+              dailyBudget: flight.dailyBudget,
+              deliveryRate: result.deliveryRate,
+            }),
+            label,
+          )
         : null,
   };
+}
+
+/**
+ * The shortfall arithmetic survives a label; the lever does not.
+ *
+ * `requiredDaily` is still the honest figure — that much a day would finish the flight — but on a
+ * burst buy it is a rate nobody intends to hold, so naming it as a budget to raise or a delivery
+ * problem to fix is advice in the wrong direction. The figure is kept and the recommendation is
+ * handed to the UI to word in terms of coverage.
+ */
+function withLabel(
+  advice: BudgetAdvice | null,
+  label: CampaignLabelKind | null,
+): BudgetAdvice | null {
+  if (!advice || !label) return advice;
+  return { ...advice, lever: "coverage" };
 }
 
 /**

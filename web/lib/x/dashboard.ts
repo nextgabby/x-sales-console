@@ -28,7 +28,7 @@ import {
   type CampaignFlight,
   type LineItemBudget,
 } from "./pacing";
-import type { XCredentials } from "../store";
+import { readCampaignLabels, type CampaignLabelKind, type XCredentials } from "../store";
 import type { CampaignRow, DashboardPayload } from "@/app/accounts/[accountId]/types";
 import type { Actor } from "../auth/actor";
 
@@ -149,7 +149,7 @@ export async function buildDashboard(options: {
    * silently drops that spend from the account total, so the list is only used for metadata
    * and every active ID gets queried.
    */
-  const [campaigns, fundingInstruments, activeIds, previousActiveIds] = await Promise.all([
+  const [campaigns, fundingInstruments, activeIds, previousActiveIds, labels] = await Promise.all([
     adsRequestAll<Campaign>({
       path: `/accounts/${accountId}/campaigns`,
       credentials,
@@ -201,6 +201,15 @@ export async function buildDashboard(options: {
         })
           .then((active) => new Set((active.data ?? []).map((entry) => entry.entity_id)))
           .catch(() => null),
+    /**
+     * How the team has labelled this advertiser's campaigns. A local read or one small query, run
+     * alongside the API calls rather than after them, and failing soft: an unreachable label store
+     * should cost a trend buy its exemption, not cost the rep their dashboard.
+     */
+    readCampaignLabels(accountId).catch(() => {
+      warnings.push("Campaign labels could not be read, so pacing may flag intermittent buys.");
+      return new Map<string, CampaignLabelKind>();
+    }),
   ]);
 
   if (!activeIds) {
@@ -446,6 +455,7 @@ export async function buildDashboard(options: {
    */
   const pacingFor = (id: string, spendSeries: number[], entityStatus: string | null) => {
     const flight = flights.get(id) ?? null;
+    const label = labels.get(id) ?? null;
     if (partial) {
       return computePacing({
         flight: null,
@@ -453,6 +463,7 @@ export async function buildDashboard(options: {
         recentDailySpend: [],
         lastCompleteDay,
         entityStatus,
+        label,
       });
     }
     return computePacing({
@@ -461,6 +472,7 @@ export async function buildDashboard(options: {
       recentDailySpend: spendSeries,
       lastCompleteDay,
       entityStatus,
+      label,
     });
   };
 

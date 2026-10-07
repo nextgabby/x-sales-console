@@ -706,7 +706,10 @@ export function demoAdsRequest(options: {
 
   if (rest === "/campaigns") {
     const withDeleted = str(query, "with_deleted") === "true";
-    const describable = account.campaigns.filter((campaign) => campaign.describable);
+    const wanted = new Set(list(query, "campaign_ids"));
+    const describable = account.campaigns
+      .filter((campaign) => campaign.describable)
+      .filter((campaign) => wanted.size === 0 || wanted.has(campaign.id));
     const visible = withDeleted
       ? describable
       : describable.filter((campaign) => !campaign.deleted);

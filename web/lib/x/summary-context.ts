@@ -81,6 +81,14 @@ function describeAdvice(
       return `; finishing in full needs only ${required}, which the current daily budget already allows — the constraint is delivery, not budget, so do NOT recommend raising it`;
     case "unrecoverable":
       return `; delivering in full would need ${required}, too large a change to recommend as a budget edit — the end date or the committed total is what needs revisiting`;
+    case "coverage":
+      /**
+       * The one lever that forbids rather than recommends. A rep has told the app this campaign
+       * only delivers when something fires, so the daily rate is arithmetic about a pattern the
+       * buy does not follow; left unqualified the model reads the shortfall and recommends more
+       * budget, which is the advice the label exists to prevent.
+       */
+      return `; this campaign delivers in bursts by design, so a daily rate is NOT the lever — do NOT recommend raising or lowering the budget, and do not treat the gaps in delivery as a fault. If the committed budget is at risk it is because the buy has not been triggered often enough, which is a question about trend or notification coverage`;
   }
 }
 
@@ -93,9 +101,20 @@ function describePacing(pacing: CampaignRow["pacing"], currency: string | null):
   const percent = (value: number | null) =>
     value == null ? "unknown" : `${Math.round(value * 100)}%`;
 
+  /**
+   * Named before the verdict, not after it. "BEHIND" is the first word the model reads, and a
+   * caveat arriving three clauses later does not stop it opening with a campaign in trouble.
+   */
+  const labelled =
+    pacing.label === "trend-genius"
+      ? "LABELLED BY THE REP AS A TREND GENIUS BUY, which only delivers when a matching trend fires — intermittent delivery is expected. "
+      : pacing.label === "notification"
+        ? "LABELLED BY THE REP AS A SUBSCRIPTION NOTIFICATION BUY, which only delivers when there is something to notify subscribers about — intermittent delivery is expected. "
+        : "";
+
   switch (pacing.status) {
     case "underpacing":
-      return pacing.basis === "flight"
+      return labelled + (pacing.basis === "flight"
         ? `BEHIND — ${percent(pacing.consumed)} of the total budget spent with ${percent(
             pacing.elapsed,
           )} of the flight elapsed; ${formatCurrency(
@@ -105,15 +124,18 @@ function describePacing(pacing: CampaignRow["pacing"], currency: string | null):
             pacing.advice,
             currency,
           )}`
-        : `BEHIND — recent daily spend is ${percent(pacing.deliveryRate)} of the daily budget`;
+        : `BEHIND — recent daily spend is ${percent(pacing.deliveryRate)} of the daily budget`);
     case "overpacing":
       return `AHEAD — ${percent(pacing.consumed)} of the total budget spent with ${percent(
         pacing.elapsed,
       )} of the flight elapsed; the budget runs out before the flight ends`;
     case "on-pace":
-      return pacing.basis === "flight"
-        ? `ON PACE — ${percent(pacing.consumed)} spent against ${percent(pacing.elapsed)} elapsed`
-        : `ON PACE — recent daily spend is ${percent(pacing.deliveryRate)} of the daily budget`;
+      return (
+        labelled +
+        (pacing.basis === "flight"
+          ? `ON PACE — ${percent(pacing.consumed)} spent against ${percent(pacing.elapsed)} elapsed`
+          : `ON PACE — recent daily spend is ${percent(pacing.deliveryRate)} of the daily budget`)
+      );
     case "dark":
       return `STOPPED DELIVERING — still live with ${formatCurrency(
         pacing.dailyBudget ?? 0,

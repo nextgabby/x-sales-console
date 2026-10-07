@@ -15,8 +15,10 @@ import { BenchmarkPanel } from "./benchmark-panel";
 import { CreativeList } from "./creative-list";
 import { AudiencePanel } from "./audience-panel";
 import { InsightsPanel } from "./insights-panel";
+import { LabelControl } from "./label-control";
 import { PlatformPanel } from "./platform-panel";
 import { TargetingPanel } from "./targeting-panel";
+import type { CampaignLabelKind } from "@/lib/store/types";
 import type { CampaignDetailPayload } from "./types";
 
 const CREATIVE_SUGGESTIONS = [
@@ -39,6 +41,7 @@ export function CampaignDrawer({
   asUser,
   days,
   timezone,
+  label,
   onClose,
 }: {
   accountId: string;
@@ -46,6 +49,12 @@ export function CampaignDrawer({
   asUser: string | null;
   days: number;
   timezone: string;
+  /**
+   * Passed in from the row this was opened from rather than fetched again. The label lives on the
+   * dashboard's pacing verdict, which is the thing it changes, so reading it from anywhere else
+   * would be a second source of truth for one enum.
+   */
+  label: CampaignLabelKind | null;
   onClose: () => void;
 }) {
   const { data, isLoading, isError, error } = useQuery({
@@ -137,6 +146,18 @@ export function CampaignDrawer({
                   value={formatUnitCost(data.totals.cpm, data.currency)}
                 />
               </div>
+
+              {/*
+                High in the drawer on purpose. A rep opens a campaign from a red "Behind" row
+                precisely to find out whether that verdict is fair, so the control that answers it
+                should not be below four panels of delivery analysis.
+              */}
+              <LabelControl
+                accountId={accountId}
+                campaignId={campaignId}
+                asUser={asUser}
+                label={label}
+              />
 
               <section>
                 <h3 className="text-sm font-semibold text-ink">

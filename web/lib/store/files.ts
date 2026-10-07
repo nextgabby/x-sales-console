@@ -10,6 +10,7 @@ import {
 import { join } from "node:path";
 
 import { DATA_DIR } from "../paths";
+import { parseCampaignLabelKind } from "./types";
 import type {
   AiConfig,
   AppKeys,
@@ -236,9 +237,13 @@ export const fileBackend: StoreBackend = {
    * distinction costs nothing here and keeps the file in the same shape the hosted table is in.
    */
   async listCampaignLabels(accountId) {
-    return readJson<CampaignLabel[]>(LABELS_PATH, []).filter(
-      (label) => label.accountId === accountId,
-    );
+    return readJson<CampaignLabel[]>(LABELS_PATH, [])
+      .filter((label) => label.accountId === accountId)
+      .flatMap((label) => {
+        // A retired or unknown kind is dropped rather than carried as a label nothing handles.
+        const kind = parseCampaignLabelKind(label.kind);
+        return kind ? [{ ...label, kind }] : [];
+      });
   },
 
   async putCampaignLabel(label) {

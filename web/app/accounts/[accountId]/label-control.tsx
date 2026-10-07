@@ -6,32 +6,42 @@ import { Badge, Callout, cx } from "@/components/ui";
 import type { CampaignLabelKind } from "@/lib/store/types";
 
 /**
- * Lets a rep say how a campaign is bought, in the two cases the Ads API cannot.
+ * Lets a rep say how a campaign is bought, in the cases the Ads API cannot express.
  *
- * It exists because pacing is wrong without it. A Trend Genius buy only delivers when a matching
- * trend fires, and a subscription notification campaign only when there is something to notify
- * people about, so both read as behind pace or stopped against a flight that assumes every day.
- * Neither is identifiable from the API — a live trend campaign comes back as an ordinary
- * `PROMOTED_TWEETS` reach buy — and advertisers only sometimes name them as such.
+ * The options do two different jobs, and the hints say which, because a rep choosing between them
+ * needs to know what each one changes:
  *
- * Deliberately a short list rather than free text. The point is not to annotate campaigns; it is to
- * change a verdict, and only these two change it.
+ * - Trend Genius changes the **pacing verdict**. It only delivers when a matching trend fires, so
+ *   against a flight that assumes every day it reads as behind pace or stopped while doing exactly
+ *   what it was sold to do.
+ * - L4R and Custom change the **comparison**. They deliver continuously, so they pace like anything
+ *   else; what they fix is the baseline. A custom unit measured against a mix that includes the
+ *   brand's other custom units cannot answer the question it was built to answer, which is whether
+ *   custom beats regular on this objective.
+ *
+ * Deliberately a short list rather than free text. The point is not to annotate campaigns, it is to
+ * change a verdict or a cohort, and only these do either.
  */
 const OPTIONS: Array<{ kind: CampaignLabelKind | null; label: string; hint: string }> = [
   {
     kind: null,
     label: "Standard buy",
-    hint: "Paced against its flight day by day, like every other campaign.",
+    hint: "Paced against its flight day by day, and compared against the brand's other campaigns on this objective.",
   },
   {
     kind: "trend-genius",
     label: "Trend Genius",
-    hint: "Delivers when a matching trend fires, so gaps between bursts are expected.",
+    hint: "Delivers when a matching trend fires, so gaps between bursts are expected and it is not paced against a daily rate.",
   },
   {
-    kind: "notification",
-    label: "Notification buy",
-    hint: "Delivers when there is something to notify subscribers about.",
+    kind: "l4r",
+    label: "L4R",
+    hint: "A custom unit. Paced normally, but compared against the brand's standard buys on this objective rather than its other custom ones.",
+  },
+  {
+    kind: "custom",
+    label: "Custom",
+    hint: "Any other unit Creative Strategy built. Paced normally, but compared against the brand's standard buys on this objective.",
   },
 ];
 
@@ -64,8 +74,14 @@ export function LabelControl({
      * Flipping a label moves a campaign between "Behind" and "Behind, by design" and shifts the
      * headline counts with it, and recomputing that on the client would be a second copy of
      * `computePacing` waiting to disagree with the first.
+     *
+     * The benchmark goes too, since a custom label changes which campaigns are in its baseline. It
+     * is keyed by campaign rather than by account, so only the open drawer's comparison is refetched.
      */
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dashboard", accountId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", accountId] });
+      queryClient.invalidateQueries({ queryKey: ["benchmark", accountId, campaignId] });
+    },
   });
 
   return (
@@ -75,8 +91,9 @@ export function LabelControl({
         <Badge>Shared with the team</Badge>
       </header>
       <p className="mt-0.5 text-xs text-muted">
-        The Ads API cannot tell a trend or notification buy from an ordinary one, so both get
-        reported as behind pace. Saying which it is fixes that for everyone on this advertiser.
+        The Ads API names neither trend buys nor custom creative, so a trend campaign gets reported
+        as behind pace and a custom unit gets compared against the wrong campaigns. Saying which it
+        is fixes both, for everyone on this advertiser.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-1.5">

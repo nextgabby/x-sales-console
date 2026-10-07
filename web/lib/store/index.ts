@@ -30,6 +30,8 @@ export type {
   XCredentials,
 } from "./types";
 
+export { isBursty, isCustomCreative } from "./types";
+
 /**
  * Every read and write goes through here, so the two deployments differ in one place.
  *

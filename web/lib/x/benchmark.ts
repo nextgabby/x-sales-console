@@ -1,14 +1,18 @@
 import type { ExtendedCampaign } from "./benchmark-history";
 import { combineSeries, totalsFrom, type MetricSeries, type Totals } from "./stats";
+import { isCustomCreative } from "../store/types";
+import type { CampaignLabelKind } from "../store/types";
 import type { CampaignRow } from "@/app/accounts/[accountId]/types";
 
 /**
  * Compares one campaign against what the brand itself normally gets for the same objective.
  *
- * Two rules decide whether this is honest or merely plausible. First, every statistic is computed
+ * Three rules decide whether this is honest or merely plausible. First, every statistic is computed
  * from summed numerators and denominators rather than by averaging per-campaign rates, because a
  * $200 campaign and a $1.8M campaign are not two equal opinions about what a click costs. Second,
- * the campaign under review is never part of its own baseline.
+ * the campaign under review is never part of its own baseline. Third, a custom creative buy is
+ * measured against the brand's standard campaigns rather than against a mix that includes its own
+ * kind — see `CustomComparison`.
  */
 
 /** Campaigns below this are treated as noise rather than history. */
@@ -109,9 +113,27 @@ export type BenchmarkLookback = {
   campaigns: number;
 };
 
+/**
+ * Set when the campaign under review is a Creative Strategy buy, which changes who it is measured
+ * against.
+ *
+ * The question a custom unit exists to answer is whether it beats the brand's regular buys on the
+ * same objective. A baseline containing the brand's *other* custom campaigns answers a muddle of
+ * that question and "how does this custom unit compare to our custom units", so they are held out
+ * and counted here instead. The panel needs the count to say so: a comparison against four
+ * standard campaigns reads differently when the rep knows three custom ones were set aside.
+ */
+export type CustomComparison = {
+  kind: CampaignLabelKind;
+  /** Other custom campaigns on this objective, kept out of the baseline. */
+  heldOut: number;
+};
+
 export type Benchmark = {
   status: BenchmarkStatus;
   objective: string | null;
+  /** Null unless the campaign under review carries a Creative Strategy label. */
+  customComparison: CustomComparison | null;
   /** Which baseline was used. Null unless `status` is "ok". */
   basis: "concurrent" | "historical" | null;
   basisReason: string | null;
@@ -389,8 +411,24 @@ export function buildBenchmark(options: {
   older?: ExtendedCampaign[];
   /** The older period searched, whether or not it yielded anything. */
   lookback?: { fromDate: string; toDate: string; reason: string | null };
+  /**
+   * How each campaign is bought, by id, for the whole account.
+   *
+   * Passed in rather than read off `campaign.pacing.label` so that older cohort members — which
+   * carry an id and a total but no pacing verdict — are judged by the same map as recent ones.
+   */
+  labels?: Map<string, CampaignLabelKind>;
 }): Benchmark {
   const { campaign, history, rawSeries, windowDays, older = [], lookback } = options;
+  const labels = options.labels ?? new Map<string, CampaignLabelKind>();
+
+  /**
+   * Whether this campaign is the custom one being judged, which decides who it is judged against.
+   * A Trend Genius label is not a creative treatment and changes nothing here.
+   */
+  const ownKind = labels.get(campaign.id) ?? null;
+  const custom = isCustomCreative(ownKind) ? ownKind : null;
+  const isOtherCustom = (id: string) => custom != null && isCustomCreative(labels.get(id) ?? null);
 
   const empty: Benchmark["cohort"] = {
     campaigns: 0,
@@ -401,6 +439,7 @@ export function buildBenchmark(options: {
   };
   const base = {
     objective: campaign.objective,
+    customComparison: null,
     basis: null,
     basisReason: null,
     windowDays,
@@ -426,7 +465,7 @@ export function buildBenchmark(options: {
    * Retired campaigns stay in the cohort: they were real spend against the same objective, and
    * dropping them would quietly shrink the history of any brand that cleans up its account.
    */
-  const cohortRows = history.filter(
+  const comparable = history.filter(
     (row) =>
       row.id !== campaign.id &&
       !row.takeover &&
@@ -434,6 +473,31 @@ export function buildBenchmark(options: {
       row.totals.spend >= MIN_COHORT_SPEND &&
       Boolean(rawSeries[row.id]),
   );
+
+  /**
+   * The held-out custom campaigns, counted before they are dropped so the panel can say how many.
+   * Counted across both periods, since a rep reading "2 held out" wants the real number and not the
+   * number that happened to fall inside the dashboard's window.
+   */
+  const heldOut =
+    comparable.filter((row) => isOtherCustom(row.id)).length +
+    older.filter((entry) => isOtherCustom(entry.id)).length;
+
+  const cohortRows = comparable.filter((row) => !isOtherCustom(row.id));
+
+  const customComparison: CustomComparison | null = custom ? { kind: custom, heldOut } : null;
+
+  /**
+   * Said even when the comparison cannot be built, because "no comparable campaign" and "no
+   * comparable *standard* campaign, and here is how many custom ones we set aside" send a rep to
+   * two different places.
+   */
+  const heldOutNote =
+    customComparison && heldOut > 0
+      ? `${heldOut} other custom campaign${heldOut === 1 ? "" : "s"} on this objective ` +
+        `${heldOut === 1 ? "was" : "were"} held out of the baseline, so this is a comparison ` +
+        `against the brand's standard buys rather than against its custom ones.`
+      : null;
 
   const recent: CohortMember[] = cohortRows.map((row) => ({
     name: row.name,
@@ -447,7 +511,10 @@ export function buildBenchmark(options: {
    * than in the fetch so there is one definition of what counts as history.
    */
   const olderMembers: CohortMember[] = older
-    .filter((entry) => totalsFrom(entry.series).spend >= MIN_COHORT_SPEND)
+    .filter(
+      (entry) =>
+        totalsFrom(entry.series).spend >= MIN_COHORT_SPEND && !isOtherCustom(entry.id),
+    )
     .map((entry) => ({
       name: entry.name,
       retired: entry.retired,
@@ -456,7 +523,13 @@ export function buildBenchmark(options: {
     }));
 
   if (recent.length === 0 && olderMembers.length === 0) {
-    return { ...base, status: "no-cohort", campaignDays: ownDays.size };
+    return {
+      ...base,
+      status: "no-cohort",
+      campaignDays: ownDays.size,
+      customComparison,
+      notes: heldOutNote ? [heldOutNote] : [],
+    };
   }
 
   // Concurrent where possible: a baseline drawn from different weeks is partly a measure of how
@@ -541,6 +614,9 @@ export function buildBenchmark(options: {
 
   const notes: string[] = [];
 
+  // First, because it changes what every figure below it is a comparison against.
+  if (heldOutNote) notes.push(heldOutNote);
+
   if (concentration > CONCENTRATION_LIMIT && spends[0]) {
     notes.push(
       `${spends[0].name} is ${Math.round(concentration * 100)}% of the baseline spend, so this is ` +
@@ -613,6 +689,7 @@ export function buildBenchmark(options: {
   return {
     status: "ok",
     objective: campaign.objective,
+    customComparison,
     basis,
     basisReason: concurrent
       ? `${selected.length} campaign${selected.length === 1 ? "" : "s"} on this objective ran over the same days`

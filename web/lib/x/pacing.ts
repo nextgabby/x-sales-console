@@ -10,6 +10,7 @@
  * perfectly on track.
  */
 import { dayDiff, microsToCurrency } from "./time";
+import { isBursty } from "../store/types";
 import type { CampaignLabelKind } from "../store/types";
 
 /** The line item fields pacing needs, as returned by `/line_items`. */
@@ -73,7 +74,7 @@ export type BudgetAdvice = {
    *   budget change alone; the flight or the commitment is what needs revisiting.
    * - `coverage`: the campaign is labelled as a buy that delivers in bursts, so a daily rate is not
    *   the lever at all. Set in place of the other three rather than alongside them, because every
-   *   one of those sentences would be wrong advice on a trend or notification campaign.
+   *   one of those sentences would be wrong advice on a trend buy.
    */
   lever: "raise-budget" | "fix-delivery" | "unrecoverable" | "coverage";
 };
@@ -113,6 +114,10 @@ export type CampaignPacing = {
    * verdict needs to know it: the badge tone, the explanation, the advice wording, and the headline
    * counts all change. A verdict that travelled without it would be presented as an alarm by
    * whichever consumer forgot to check.
+   *
+   * Only the bursty kinds change anything here — see `isBursty`. A Creative Strategy label is
+   * carried too, because the row still shows it, but it is deliberately inert for pacing: those
+   * campaigns deliver continuously, so suppressing their alarms would hide real problems.
    */
   label: CampaignLabelKind | null;
 };
@@ -346,13 +351,17 @@ export function computePacing(options: {
    * them, so conflating the two buries the urgent case under the trivial ones.
    */
   /**
-   * A labelled campaign is exempt from both. "Was delivering, now spending nothing, worth checking
-   * today" is the single loudest thing this module says, and on a trend buy between bursts it is
-   * false every time — the gap *is* the product. These campaigns fall through to the flight
+   * A campaign labelled as bursty is exempt from both. "Was delivering, now spending nothing, worth
+   * checking today" is the single loudest thing this module says, and on a trend buy between bursts
+   * it is false every time — the gap *is* the product. These campaigns fall through to the flight
    * measurement below instead, which still asks the question that matters: will the committed
    * budget be spent by the end date. That is a question a trend buy really can fail.
+   *
+   * A Creative Strategy label does not exempt anything. Those campaigns deliver continuously, so a
+   * custom unit that has stopped spending is as broken as any other campaign, and the fact that it
+   * was expensive to build makes saying so more important rather than less.
    */
-  if (!label && live && flight.dailyBudget && activeDays.length === 0) {
+  if (!isBursty(label) && live && flight.dailyBudget && activeDays.length === 0) {
     const deliveredEarlier = recentDailySpend
       .slice(0, -DELIVERY_RATE_DAYS)
       .some((value) => value > 0);
@@ -419,18 +428,21 @@ export function computePacing(options: {
 }
 
 /**
- * The shortfall arithmetic survives a label; the lever does not.
+ * The shortfall arithmetic survives a bursty label; the lever does not.
  *
  * `requiredDaily` is still the honest figure — that much a day would finish the flight — but on a
  * burst buy it is a rate nobody intends to hold, so naming it as a budget to raise or a delivery
  * problem to fix is advice in the wrong direction. The figure is kept and the recommendation is
  * handed to the UI to word in terms of coverage.
+ *
+ * A Creative Strategy label is left alone: a custom unit behind on its flight needs the same budget
+ * or delivery advice as anything else.
  */
 function withLabel(
   advice: BudgetAdvice | null,
   label: CampaignLabelKind | null,
 ): BudgetAdvice | null {
-  if (!advice || !label) return advice;
+  if (!advice || !isBursty(label)) return advice;
   return { ...advice, lever: "coverage" };
 }
 

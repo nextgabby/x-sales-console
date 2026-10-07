@@ -94,7 +94,22 @@ function Body({
   const { benchmark: b, currency } = response;
 
   if (b.status !== "ok") {
-    return <Callout tone="warn">{explain(b)}</Callout>;
+    return (
+      <div className="space-y-2">
+        <Callout tone="warn">{explain(b)}</Callout>
+        {/*
+          Rendered here too, because the one note that can accompany a failure is the one that
+          explains it: a custom buy whose only company on this objective is other custom buys has
+          no standard baseline, and "no comparable campaign" on its own sends a rep looking for a
+          data problem that is not there.
+        */}
+        {b.notes.map((note) => (
+          <p key={note} className="text-[11px] leading-relaxed text-muted">
+            {note}
+          </p>
+        ))}
+      </div>
+    );
   }
 
   return (
@@ -110,6 +125,17 @@ function Body({
                   : `${b.windowDays}-day history`}
             </Badge>
             {b.objective ? <Badge tone="neutral">{titleCase(b.objective)}</Badge> : null}
+            {/*
+              Named on the row itself, not only in the note below. Every percentage in this panel
+              means something different once the cohort is standard buys only, and the rep reading
+              "18% better CPE" needs to know it is better than regular rather than better than
+              average before they repeat it to the advertiser.
+            */}
+            {b.customComparison ? (
+              <Badge tone="accent">
+                {b.customComparison.kind === "l4r" ? "L4R" : "Custom"} vs standard
+              </Badge>
+            ) : null}
           </div>
           <p className="text-[11px] text-muted">
             {b.cohort.campaigns} campaign{b.cohort.campaigns === 1 ? "" : "s"} ·{" "}

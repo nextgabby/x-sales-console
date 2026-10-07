@@ -292,14 +292,43 @@ const LUMEN: CampaignSpec[] = [
   { key: "retired-spring", name: "Spring Acquisition — Retired", objective: "APP_INSTALLS", startDaysAgo: 88, endDaysAgo: 41, deleted: true, dailyImpressions: 130_000, cpm: 5.8, ctr: 0.0049, installRate: 0.00026 },
   { key: "brand-reach", name: "Brand Reach — Launch Week", objective: "REACH", startDaysAgo: 46, dailyImpressions: 540_000, cpm: 4.6, ctr: 0.0031 },
   { key: "brand-reach-2", name: "Brand Reach — Sustain", objective: "REACH", startDaysAgo: 33, dailyImpressions: 300_000, cpm: 5.4, ctr: 0.0027 },
-  { key: "engage", name: "Community Engagement", objective: "ENGAGEMENTS", startDaysAgo: 58, dailyImpressions: 150_000, cpm: 6.1, ctr: 0.0064, engagementRate: 0.027 },
   /**
-   * A subscription notification buy: it fires when there is something to notify subscribers about,
-   * so it delivers on roughly two days in five and reads as behind pace against a flight that
-   * assumes every day. Nothing in its name or its API fields says what it is — the objective is the
-   * same `ENGAGEMENTS` as the campaign above it — which is exactly why a rep has to label it.
+   * Four ordinary engagement campaigns, which exist to be a cohort rather than to be interesting.
+   * The custom units below are judged against the brand's standard buys on the same objective, and
+   * a comparison against one or two campaigns is a comparison against those campaigns — four is
+   * where the quartile band starts being drawn, so it is what the demo carries.
    */
-  { key: "subs-notify", name: "Drop Alerts — Subscribers", objective: "ENGAGEMENTS", startDaysAgo: 44, endDaysAgo: -22, totalBudgetMultiple: 1, burstRate: 0.4, darkSince: 9, dailyImpressions: 180_000, cpm: 7.4, ctr: 0.0071, engagementRate: 0.031 },
+  { key: "engage", name: "Community Engagement", objective: "ENGAGEMENTS", startDaysAgo: 58, dailyImpressions: 150_000, cpm: 6.1, ctr: 0.0064, engagementRate: 0.027 },
+  { key: "engage-evergreen", name: "Evergreen Engagement — Broad", objective: "ENGAGEMENTS", startDaysAgo: 72, dailyImpressions: 240_000, cpm: 5.4, ctr: 0.0058, engagementRate: 0.023 },
+  { key: "engage-replies", name: "Reply Prompts — Fitness", objective: "ENGAGEMENTS", startDaysAgo: 41, dailyImpressions: 90_000, cpm: 7.8, ctr: 0.0072, engagementRate: 0.031 },
+  { key: "engage-topics", name: "Topic Targeting — Wellness", objective: "ENGAGEMENTS", startDaysAgo: 66, dailyImpressions: 130_000, cpm: 6.7, ctr: 0.0061, engagementRate: 0.029 },
+  /**
+   * A trend buy nobody has labelled, kept deliberately unlabelled: it delivers on two days in five
+   * and has not fired for nine, so it is reported as a campaign that stopped delivering and is
+   * worth checking today. That verdict is wrong, and the only thing that fixes it is a rep saying
+   * so — which is the whole argument for the label, shown here as the problem rather than the fix.
+   * Harborline carries the same shape labelled.
+   */
+  { key: "moments", name: "Live Moments — Engagement", objective: "ENGAGEMENTS", startDaysAgo: 44, endDaysAgo: -22, totalBudgetMultiple: 1, burstRate: 0.4, darkSince: 9, dailyImpressions: 180_000, cpm: 7.4, ctr: 0.0071, engagementRate: 0.031 },
+  /**
+   * The custom units, and the reason the comparison needs a label at all: both are plain
+   * `ENGAGEMENTS` promoted posts in the API, identical in every field to the four campaigns above.
+   *
+   * The L4R one is deliberately the best engagement buy on the account — roughly twice the
+   * engagement rate at a similar CPM, so a little over half the cost per engagement. That is the
+   * finding the feature exists to produce, and it only appears if the baseline is the standard
+   * campaigns: pooled in with the other custom unit, a custom buy is partly compared against
+   * itself and the advantage shrinks for no reason a rep could explain to the advertiser.
+   */
+  { key: "l4r-drop", name: "Drop Alerts — Subscribers", objective: "ENGAGEMENTS", startDaysAgo: 50, dailyImpressions: 210_000, cpm: 6.4, ctr: 0.0094, engagementRate: 0.055 },
+  /**
+   * The second custom unit is deliberately behind pace with its cap binding, which is the case
+   * that proves a custom label is not an excuse. It keeps its red "Behind" badge and its "raise the
+   * daily budget" advice, and shows the "Custom" badge beside them rather than instead of them: a
+   * bespoke unit that will not spend its commitment is a worse problem than an ordinary campaign
+   * doing the same, because somebody built it specially.
+   */
+  { key: "custom-thread", name: "Launch Thread — Custom Unit", objective: "ENGAGEMENTS", startDaysAgo: 36, endDaysAgo: -16, totalBudgetMultiple: 1.5, capUse: 0.97, dailyImpressions: 120_000, cpm: 8.2, ctr: 0.0081, engagementRate: 0.042 },
 ];
 
 /**
@@ -333,8 +362,8 @@ const HARBORLINE: CampaignSpec[] = [
    *
    * It has also not been triggered for nine days, which is the other half of the problem: without
    * its label this would be reported as a campaign that stopped delivering and is "worth checking
-   * today". The Lumen notification campaign is the same shape left unlabelled, so the demo carries
-   * both the fixed case and the broken one.
+   * today". Lumen's "Live Moments" is the same shape left unlabelled, so the demo carries both the
+   * fixed case and the broken one.
    */
   { key: "trend-genius", name: "Trend Genius — Summer Peaks", objective: "REACH", startDaysAgo: 40, endDaysAgo: -20, totalBudgetMultiple: 1, burstRate: 0.5, darkSince: 9, dailyImpressions: 430_000, cpm: 5, ctr: 0.0022 },
 ];

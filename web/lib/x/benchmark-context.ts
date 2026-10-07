@@ -22,6 +22,8 @@ Rules you must follow:
 - Volume figures are context only. Do not treat a campaign's spend or install count as better or worse than the baseline: one campaign against a cohort of several is not a fair comparison of size.
 - The caveats given are part of the finding, not fine print. If the baseline is concentrated in one campaign, or built from few campaigns, or the install counts lean on view-through attribution, say so where it changes how much weight the comparison carries.
 - Where the comparison covers only the days this campaign ran, that is a like-for-like read. Where it covers the full window, say that auction conditions differ across it.
+- Where the campaign is marked as a CUSTOM CREATIVE BUY, the baseline has deliberately been narrowed to the advertiser's STANDARD campaigns on this objective, and that is the comparison to make: does the custom unit beat the brand's regular buys. Say so explicitly. Do NOT describe the held-out custom campaigns, speculate about how they performed, or treat their absence as a flaw in the baseline. You know nothing about them beyond how many there were.
+- Never explain a custom unit's result by what the unit is. You are told that it is custom and, where given, which format; you are told nothing about how it looks or behaves, so any claim that a result follows from the format is invention.
 - This tool is read-only. Frame suggestions as talking points, not as changes you are making.
 - Be direct and specific. No preamble, no restating the question, no filler like "based on the data provided".
 
@@ -41,6 +43,24 @@ export function buildBenchmarkPrompt(options: {
   const lines = [
     `Campaign: ${campaignName}`,
     `Objective: ${benchmark.objective ? titleCase(benchmark.objective) : "unknown"}`,
+    /**
+     * Stated before the baseline line, because it changes what that baseline is. Without it the
+     * model describes a comparison against "the advertiser's other campaigns" when the cohort was
+     * narrowed to the standard ones on purpose, which understates the finding the rep is after.
+     */
+    ...(benchmark.customComparison
+      ? [
+          `This campaign is a CUSTOM CREATIVE BUY${
+            benchmark.customComparison.kind === "l4r" ? " (L4R)" : ""
+          }. Its baseline holds only the advertiser's standard campaigns on this objective, so the comparison is custom against regular. ${
+            benchmark.customComparison.heldOut === 0
+              ? "The advertiser has no other custom campaign on this objective."
+              : `${benchmark.customComparison.heldOut} other custom campaign${
+                  benchmark.customComparison.heldOut === 1 ? " was" : "s were"
+                } held out of the baseline.`
+          }`,
+        ]
+      : []),
     benchmark.basis === "concurrent"
       ? `Baseline: ${benchmark.cohort.campaigns} of this advertiser's other campaigns on the same objective, measured over exactly the ${benchmark.campaignDays} days this campaign delivered. This is a like-for-like comparison.`
       : benchmark.lookback

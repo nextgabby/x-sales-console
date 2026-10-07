@@ -122,6 +122,9 @@ await clearAiConfig(ALICE);
  * the same campaigns and the same row reads differently depending on who opened it.
  */
 console.log("== campaign labels, shared on purpose ==");
+// Opened here rather than further down because both this section and "secrets at rest" need to read
+// the tables directly, to assert things the store's own interface cannot express.
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const SHARED_ACCOUNT = "18ce0000001";
 await setCampaignLabel({
   accountId: SHARED_ACCOUNT,
@@ -134,13 +137,26 @@ check("one rep's label is visible to another", asBob.get("cmp-trend") === "trend
 const [onlyLabel] = await listCampaignLabels(SHARED_ACCOUNT);
 check("and records who set it, so a surprising label can be asked about", onlyLabel?.setBy === "alice_sales");
 check("labels do not leak to another advertiser", (await readCampaignLabels("18ce0000002")).size === 0);
-await setCampaignLabel({ accountId: SHARED_ACCOUNT, campaignId: "cmp-trend", kind: "notification", setBy: "bob_sales" });
+await setCampaignLabel({ accountId: SHARED_ACCOUNT, campaignId: "cmp-trend", kind: "custom", setBy: "bob_sales" });
 check("re-labelling replaces rather than duplicates", (await listCampaignLabels(SHARED_ACCOUNT)).length === 1);
 await setCampaignLabel({ accountId: SHARED_ACCOUNT, campaignId: "cmp-trend", kind: null, setBy: "bob_sales" });
 check("and a label can be taken off again", (await readCampaignLabels(SHARED_ACCOUNT)).size === 0);
 
+/*
+ * `notification` was a label this app used to write, and rows carrying it can still be in a team's
+ * database. It is read back as L4R, the mechanic those buys were built on, rather than dropped —
+ * which would silently discard a rep's work — and an unknown kind is dropped rather than carried as
+ * a verdict nothing downstream handles.
+ */
+await pool.query(
+  `INSERT INTO campaign_labels (account_id, campaign_id, kind, set_by) VALUES ($1, $2, $3, $4), ($1, $5, $6, $4)`,
+  [SHARED_ACCOUNT, "cmp-legacy", "notification", "alice_sales", "cmp-future", "invented-by-a-newer-build"],
+);
+const migrated = await readCampaignLabels(SHARED_ACCOUNT);
+check("a retired label is read back as the kind that replaced it", migrated.get("cmp-legacy") === "l4r", String(migrated.get("cmp-legacy")));
+check("and an unrecognised one is dropped rather than guessed at", !migrated.has("cmp-future"));
+
 console.log("== secrets at rest ==");
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const raw = await pool.query("select access_token_secret from users where user_id = $1", [ALICE]);
 const stored = raw.rows[0].access_token_secret;
 check("the token secret is not in the table in the clear", !stored.includes("alice-secret"), stored.slice(0, 24));

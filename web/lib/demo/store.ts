@@ -48,12 +48,16 @@ export const DEMO_SPY_GRANTS: SpyGrant[] = DEMO_ACCOUNTS.filter(
 }));
 
 /**
- * One of the two bursty campaigns is labelled and the other is not, deliberately.
+ * The labels a rep is imagined to have already set, since a demo stores nothing and a reviewer
+ * cannot set one themselves and watch what changes.
  *
- * A demo stores nothing, so a reviewer cannot set a label themselves and see what changes. Shipping
- * one of each puts both states on screen instead: Harborline's trend buy reads as intermittent by
- * design, and Lumen's notification campaign is still being reported as behind pace, which is the
- * problem the label exists to fix.
+ * Both of the bursty campaigns are shipped, one labelled and one not, so both states are on screen:
+ * Harborline's trend buy reads as intermittent by design, and Lumen's "Live Moments" is still
+ * reported as a campaign that stopped delivering, which is the problem the label exists to fix.
+ *
+ * Both of Lumen's custom units are labelled, because that comparison needs two to be worth looking
+ * at. Reviewing either one holds the other out of the baseline, which is the behaviour that cannot
+ * be seen with a single custom campaign on the account.
  */
 export const DEMO_CAMPAIGN_LABELS: CampaignLabel[] = [
   {
@@ -62,5 +66,19 @@ export const DEMO_CAMPAIGN_LABELS: CampaignLabel[] = [
     kind: "trend-genius",
     setBy: DEMO_USER.handle,
     setAt: "2026-01-06T09:12:00Z",
+  },
+  {
+    accountId: "18ce5dem0001",
+    campaignId: entityId("c", "18ce5dem0001:l4r-drop"),
+    kind: "l4r",
+    setBy: DEMO_USER.handle,
+    setAt: "2026-01-06T09:14:00Z",
+  },
+  {
+    accountId: "18ce5dem0001",
+    campaignId: entityId("c", "18ce5dem0001:custom-thread"),
+    kind: "custom",
+    setBy: DEMO_USER.handle,
+    setAt: "2026-01-06T09:15:00Z",
   },
 ];

@@ -1,7 +1,8 @@
 import { buildBenchmark, SMALL_COHORT, type Benchmark } from "./benchmark";
 import { fetchExtendedHistory } from "./benchmark-history";
 import type { MetricSeries } from "./stats";
-import type { XCredentials } from "../store";
+import { readCampaignLabels } from "../store";
+import type { CampaignLabelKind, XCredentials } from "../store";
 import type { CampaignRow, DashboardPayload } from "@/app/accounts/[accountId]/types";
 import type { Actor } from "../auth/actor";
 
@@ -25,7 +26,23 @@ export async function buildBenchmarkWithLookback(options: {
   const { credentials, accountId, asUser, actor, dashboard, campaign, windowDays } = options;
   const rawSeries = dashboard.rawSeries ?? {};
 
-  const recent = buildBenchmark({ campaign, history: dashboard.campaigns, rawSeries, windowDays });
+  /**
+   * Read here rather than taken from the rows' pacing verdicts, because the lookback's campaigns
+   * never get one and they have to be filtered by the same rule. A failure is not fatal: the
+   * comparison falls back to every campaign on the objective, which is what it was before labels
+   * existed, so a database blip costs precision rather than the panel.
+   */
+  const labels = await readCampaignLabels(accountId).catch(
+    () => new Map<string, CampaignLabelKind>(),
+  );
+
+  const recent = buildBenchmark({
+    campaign,
+    history: dashboard.campaigns,
+    rawSeries,
+    windowDays,
+    labels,
+  });
 
   /**
    * Reaching further back is attempted only when the recent window cannot carry the comparison.
@@ -65,6 +82,7 @@ export async function buildBenchmarkWithLookback(options: {
     history: dashboard.campaigns,
     rawSeries,
     windowDays,
+    labels,
     older: older.campaigns,
     lookback: { fromDate: older.fromDate, toDate: older.toDate, reason: older.reason },
   });

@@ -125,6 +125,54 @@ d=json.load(open('/tmp/v-lab1.json'))
 r=[r for r in d['campaigns'] if r['pacing']['status']=='dark']
 print(len(r)==1 and r[0]['pacing']['label'] is None and d['pacing']['darkDailyBudget']>0)
 ")"
+# The two label families do opposite things, and the one that is easy to get wrong is this one: a
+# custom creative label must not buy a campaign any forgiveness, because those campaigns deliver
+# continuously and somebody paid to build them.
+check "a custom creative label does not suppress a real pacing problem" "$(python3 -c "
+import json
+d=json.load(open('/tmp/v-lab1.json'))
+r=[r for r in d['campaigns'] if r['pacing']['label']=='custom'][0]
+print(r['pacing']['status']=='underpacing' and r['pacing']['advice']['lever']=='raise-budget')
+")"
+# The comparison the custom labels exist for: is a bespoke unit better than the brand's regular buys
+# on the same objective. The assertions pin the part that is easy to break silently — that the cohort
+# really is standard-only — rather than the metric values, which the universe can retune.
+L4R=$(python3 -c "
+import json
+d=json.load(open('/tmp/v-lab1.json'))
+print([r['id'] for r in d['campaigns'] if r['pacing']['label']=='l4r'][0])
+")
+STD=$(python3 -c "
+import json
+d=json.load(open('/tmp/v-lab1.json'))
+print([r['id'] for r in d['campaigns'] if r['name'].startswith('Community Engagement')][0])
+")
+curl -s "$B/api/accounts/18ce5dem0001/campaigns/$L4R/benchmark" > /tmp/v-bm-l4r.json
+curl -s "$B/api/accounts/18ce5dem0001/campaigns/$STD/benchmark" > /tmp/v-bm-std.json
+check "a custom buy is compared only against standard buys, and says so" "$(python3 -c "
+import json
+b=json.load(open('/tmp/v-bm-l4r.json'))['benchmark']
+labelled={'Drop Alerts — Subscribers', 'Launch Thread — Custom Unit'}
+print(b['customComparison']=={'kind':'l4r','heldOut':1}
+      and not (set(b['cohort']['names']) & labelled)
+      and any('held out of the baseline' in note for note in b['notes']))
+")"
+check "and beats them on the objective's own KPI" "$(python3 -c "
+import json
+b=json.load(open('/tmp/v-bm-l4r.json'))['benchmark']
+kpi=[m for m in b['metrics'] if m['primary']][0]
+print(kpi['key']=='cpe' and kpi['campaign'] < kpi['baseline'] and kpi['position']=='below')
+")"
+# The narrowing is one-directional on purpose: a standard campaign's baseline is still everything
+# the brand ran on the objective, which is what it was before labels existed.
+check "a standard buy's baseline is unchanged and still holds the custom ones" "$(python3 -c "
+import json
+b=json.load(open('/tmp/v-bm-std.json'))['benchmark']
+print(b['customComparison'] is None
+      and 'Drop Alerts — Subscribers' in b['cohort']['names']
+      and 'Launch Thread — Custom Unit' in b['cohort']['names'])
+")"
+
 print -r -- '{"campaignId":"x","kind":"trend-genius"}' > /tmp/v-body-label.json
 check "labelling is refused in demo mode" "$(
 S=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$B/api/accounts/18ce5dem0001/labels" -H 'content-type: application/json' --data @/tmp/v-body-label.json)

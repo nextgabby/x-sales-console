@@ -10,6 +10,7 @@ import {
   type CampaignPacing,
   type PacingStatus,
 } from "@/lib/x/pacing";
+import { isBursty } from "@/lib/store/types";
 import type { CampaignLabelKind } from "@/lib/store/types";
 import type { CampaignRow, PacingSummary } from "./types";
 
@@ -44,7 +45,8 @@ const STATUS_TONE: Record<PacingStatus, "neutral" | "positive" | "warn" | "negat
 
 export const LABEL_NAME: Record<CampaignLabelKind, string> = {
   "trend-genius": "Trend Genius",
-  notification: "Notification buy",
+  l4r: "L4R",
+  custom: "Custom",
 };
 
 /** Statuses a rep should act on. Everything else is context, not a task. */
@@ -52,16 +54,17 @@ const ACTIONABLE = new Set<PacingStatus>(["dark", "underpacing", "idle", "overpa
 
 /**
  * Ranked on two keys. Within a tier it is money at stake per day, so a big idle budget outranks a
- * small shortfall. The tier exists for labelled campaigns: a trend buy is often the largest daily
+ * small shortfall. The tier exists for bursty campaigns: a trend buy is often the largest daily
  * budget on the account and would otherwise head a panel of things to do today, having given up its
  * claim to be one of them. It stays above the healthy rows, because the commitment may still go
- * unspent, and sits below every campaign a rep can act on now.
+ * unspent, and sits below every campaign a rep can act on now. A custom creative label does not
+ * demote anything, since those campaigns are as actionable as any other.
  */
 function severity(pacing: CampaignPacing): { tier: number; stake: number } {
   if (!ACTIONABLE.has(pacing.status)) return { tier: 0, stake: 0 };
   // Overpacing stakes nothing but still belongs above the healthy rows.
   const stake = dailyStake(pacing) + (pacing.status === "overpacing" ? 0.01 : 0);
-  return { tier: pacing.label ? 1 : 2, stake };
+  return { tier: isBursty(pacing.label) ? 1 : 2, stake };
 }
 
 export function PacingPanel({
@@ -198,17 +201,20 @@ function PacingRow({ row, currency }: { row: CampaignRow; currency: string | nul
             {row.name}
           </span>
           {/*
-            A labelled campaign shows how it is bought instead of a verdict. "Behind" measures a
-            daily rate the buy was never meant to hold, so on a trend or notification campaign it is
-            a false alarm, and a panel that cries wolf stops being read. The arithmetic is not
-            hidden: the line below still says what share of the budget is gone and what goes unspent
-            at this rate, and the shortfall is still counted in "Budget at risk" above.
+            A bursty campaign shows how it is bought *instead of* a verdict. "Behind" measures a
+            daily rate the buy was never meant to hold, so on a trend campaign it is a false alarm,
+            and a panel that cries wolf stops being read. The arithmetic is not hidden: the line
+            below still says what share of the budget is gone and what goes unspent at this rate,
+            and the shortfall is still counted in "Budget at risk" above.
+
+            A custom creative label keeps its verdict and shows the label *beside* it. Those
+            campaigns deliver continuously, so "Behind" means what it always means, and a custom
+            unit is the last thing a rep should be quietly reassured about.
           */}
-          {pacing.label ? (
-            <Badge tone="accent">{LABEL_NAME[pacing.label]}</Badge>
-          ) : (
+          {isBursty(pacing.label) ? null : (
             <Badge tone={STATUS_TONE[pacing.status]}>{STATUS_LABEL[pacing.status]}</Badge>
           )}
+          {pacing.label ? <Badge tone="accent">{LABEL_NAME[pacing.label]}</Badge> : null}
         </div>
         <div className="nums shrink-0 text-xs text-muted">
           {pacing.basis === "flight" ? (
@@ -229,7 +235,7 @@ function PacingRow({ row, currency }: { row: CampaignRow; currency: string | nul
         <FlightBar
           consumed={pacing.consumed}
           elapsed={pacing.elapsed}
-          status={pacing.label ? null : pacing.status}
+          status={isBursty(pacing.label) ? null : pacing.status}
         />
       ) : null}
 
@@ -252,7 +258,7 @@ function Advice({ advice, currency }: { advice: BudgetAdvice; currency: string |
 
   /**
    * The only branch that recommends nothing. Every sentence below it is about a daily rate, and a
-   * rep has said this campaign does not run to one — it delivers when a trend or a notification
+   * rep has said this campaign does not run to one — it delivers when a matching trend
    * fires. The shortfall is still named, because the committed money really may go unspent; what
    * changes is that the lever is coverage rather than budget.
    */
@@ -375,7 +381,9 @@ function explain(pacing: CampaignPacing, currency: string | null): string {
        * "Recent spend is 0% of the daily budget" is the one line in this panel that reads as an
        * outage, and on a labelled buy between bursts it is the expected state.
        */
-      return pacing.label ? `${rate} It delivers in bursts, so a quiet stretch is expected.` : rate;
+      return isBursty(pacing.label)
+        ? `${rate} It delivers in bursts, so a quiet stretch is expected.`
+        : rate;
     case "overpacing":
       return `${formatPercent(pacing.consumed ?? 0, 0)} of budget spent with ${formatPercent(
         pacing.elapsed ?? 0,

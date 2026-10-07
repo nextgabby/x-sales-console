@@ -7,7 +7,7 @@ import { currentSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
-const KINDS: CampaignLabelKind[] = ["trend-genius", "notification"];
+const KINDS: CampaignLabelKind[] = ["trend-genius", "l4r", "custom"];
 
 /**
  * Records how a campaign is bought, which is the one thing a rep can write that another rep reads.

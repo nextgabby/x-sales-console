@@ -59,16 +59,53 @@ export type AiConfig = {
 };
 
 /**
- * How a campaign is bought, in the two cases the Ads API cannot express.
+ * How a campaign is bought, in the cases the Ads API cannot express.
  *
- * Both deliver in bursts rather than continuously, so the pacing verdict reads them as behind or
- * stopped when they are doing exactly what they were sold to do. Neither is identifiable from the
- * API: a live Trend Genius campaign comes back as `PROMOTED_TWEETS` / `REACH` / `ALL_ON_TWITTER`,
- * indistinguishable from an ordinary reach buy, and subscription notification campaigns are plain
- * `ENGAGEMENTS`. Advertisers sometimes say so in the campaign name and often do not. So a rep says
- * so instead.
+ * None of these is identifiable from the API. A live Trend Genius campaign comes back as
+ * `PROMOTED_TWEETS` / `REACH` / `ALL_ON_TWITTER`, indistinguishable from an ordinary reach buy, and
+ * the custom units Creative Strategy builds are not named anywhere in the API at all — not in the
+ * campaign, the line item or the card type. Advertisers sometimes say so in the campaign name and
+ * often do not, so a rep says so instead.
+ *
+ * The kinds answer two unrelated questions, which is why `isBursty` exists rather than every label
+ * behaving alike:
+ *
+ * - `trend-genius` is about **delivery**. It fires when a matching trend does, so it delivers in
+ *   bursts and the pacing verdict reads it as behind, or stopped, when it is doing exactly what it
+ *   was sold to do.
+ * - `l4r` and `custom` are about **creative**. They deliver continuously like any other campaign,
+ *   so they must pace normally; what they change is the comparison. The question they exist to
+ *   answer is whether a custom unit beats the brand's regular buys on the same objective, which
+ *   means holding the brand's other custom campaigns out of the baseline.
  */
-export type CampaignLabelKind = "trend-genius" | "notification";
+export type CampaignLabelKind = "trend-genius" | "l4r" | "custom";
+
+/** Labels that mean the campaign delivers in bursts, and so must not be paced against a daily rate. */
+export function isBursty(kind: CampaignLabelKind | null): boolean {
+  return kind === "trend-genius";
+}
+
+/** Labels that mark a Creative Strategy buy, whose baseline is the brand's standard campaigns. */
+export function isCustomCreative(kind: CampaignLabelKind | null): boolean {
+  return kind === "l4r" || kind === "custom";
+}
+
+/**
+ * Reads a kind back out of storage, which is where a retired label can still turn up.
+ *
+ * `notification` was the original second label, for subscription-notification buys, and it
+ * suppressed the pacing alarm the way `trend-genius` does. It was replaced because the thing worth
+ * recording about those campaigns turned out to be the custom unit they are built on rather than
+ * their delivery: they do not actually switch on and off, so they should pace like anything else.
+ * L4R is the mechanic behind them, so that is where stored rows land. Anything unrecognised is
+ * dropped rather than guessed at, so a label written by a newer version of the app cannot make an
+ * older one report a verdict it does not understand.
+ */
+export function parseCampaignLabelKind(raw: string): CampaignLabelKind | null {
+  if (raw === "trend-genius" || raw === "l4r" || raw === "custom") return raw;
+  if (raw === "notification") return "l4r";
+  return null;
+}
 
 export type CampaignLabel = {
   accountId: string;

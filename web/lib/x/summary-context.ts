@@ -88,7 +88,7 @@ function describeAdvice(
        * buy does not follow; left unqualified the model reads the shortfall and recommends more
        * budget, which is the advice the label exists to prevent.
        */
-      return `; this campaign delivers in bursts by design, so a daily rate is NOT the lever — do NOT recommend raising or lowering the budget, and do not treat the gaps in delivery as a fault. If the committed budget is at risk it is because the buy has not been triggered often enough, which is a question about trend or notification coverage`;
+      return `; this campaign delivers in bursts by design, so a daily rate is NOT the lever — do NOT recommend raising or lowering the budget, and do not treat the gaps in delivery as a fault. If the committed budget is at risk it is because the buy has not been triggered often enough, which is a question about trend coverage`;
   }
 }
 
@@ -105,11 +105,17 @@ function describePacing(pacing: CampaignRow["pacing"], currency: string | null):
    * Named before the verdict, not after it. "BEHIND" is the first word the model reads, and a
    * caveat arriving three clauses later does not stop it opening with a campaign in trouble.
    */
+  /**
+   * Only the bursty label qualifies a verdict. A custom creative label is stated too, because it is
+   * worth knowing what is being judged, but it is explicitly not an excuse: those campaigns deliver
+   * continuously, and a model told "this is a bespoke unit" with no further instruction reaches for
+   * exactly the reassurance the trend label is meant to earn and this one is not.
+   */
   const labelled =
     pacing.label === "trend-genius"
       ? "LABELLED BY THE REP AS A TREND GENIUS BUY, which only delivers when a matching trend fires — intermittent delivery is expected. "
-      : pacing.label === "notification"
-        ? "LABELLED BY THE REP AS A SUBSCRIPTION NOTIFICATION BUY, which only delivers when there is something to notify subscribers about — intermittent delivery is expected. "
+      : pacing.label === "l4r" || pacing.label === "custom"
+        ? `LABELLED BY THE REP AS A CUSTOM CREATIVE BUY (${pacing.label === "l4r" ? "L4R" : "custom unit"}), which delivers continuously like any other campaign — this label does NOT excuse a pacing problem. `
         : "";
 
   switch (pacing.status) {

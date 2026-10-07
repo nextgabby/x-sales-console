@@ -372,7 +372,7 @@ always quoting a figure:
 | `raise-budget` | Spending ≥90% of the cap, and the required rate is ≤3× it | Raise the daily budget to $X |
 | `fix-delivery` | Cap already permits the required rate | Budget is not the constraint; check bid and targeting |
 | `unrecoverable` | Cap is binding but the required rate is >3× it | Too far behind for a budget edit; revisit the end date or the commitment |
-| `coverage` | The campaign is labelled as a trend or notification buy | Budget is not the lever; the question is how often it is triggered |
+| `coverage` | The campaign is labelled a Trend Genius buy | Budget is not the lever; the question is how often it is triggered |
 
 The `fix-delivery` case is the one that makes this worth guarding, and it is the only underpacing
 flight across the four accounts tested. Novig's Trend Genius has $259,254 left over 33 days, so it
@@ -390,21 +390,26 @@ pacing status itself. In the `fix-delivery` case the context explicitly tells th
 recommend raising the budget, because "how do I optimize this?" otherwise reliably produces exactly
 that advice.
 
-### Campaigns that are meant to deliver in bursts
+### How a campaign is bought, which the API will not tell you
 
-Trend Genius and subscription-notification buys deliver when something fires, not every day. Pacing
-measures a daily rate, so between bursts both read as behind pace, and after a long enough gap as
-`dark` — "stopped delivering", the loudest verdict the panel has.
+One control in the campaign drawer, `POST /api/accounts/:id/labels`, and `CampaignLabelKind` with
+three values. They do **two unrelated jobs**, and conflating them is the mistake to avoid when
+changing this code — `isBursty()` and `isCustomCreative()` in `lib/store/types.ts` exist so that no
+caller has to remember which is which.
 
-**Nothing in the API distinguishes them, and the delivery pattern is the wrong thing to guess
-from.** Novig's Trend Genius returns `product_type: PROMOTED_TWEETS`, `objective: REACH`,
-`placements: ALL_ON_TWITTER`, which is identical to an ordinary reach buy; Call of Duty's
-notification campaigns are `objective: ENGAGEMENTS` promoted posts. Intermittent delivery is the
-only observable difference, and it is also precisely what a genuinely broken campaign looks like, so
-auto-detection would trade a false alarm for a silent failure. Names do not help either: "Like to
-Subscribe" is a convention, and the campaigns most likely to be misread are the unrenamed ones.
+| Label | What it is | What it changes |
+|---|---|---|
+| `trend-genius` | Fires when a matching trend does, so it delivers in bursts | Pacing: no alarm, `coverage` lever |
+| `l4r` | A custom unit, delivering continuously | The benchmark cohort. Pacing untouched |
+| `custom` | Any other Creative Strategy unit | The benchmark cohort. Pacing untouched |
 
-So a rep says which it is, from the campaign drawer, and `POST /api/accounts/:id/labels` stores it.
+**Nothing in the API names any of them.** Novig's Trend Genius returns
+`product_type: PROMOTED_TWEETS`, `objective: REACH`, `placements: ALL_ON_TWITTER`, identical to an
+ordinary reach buy; the custom units are plain promoted posts, with no marker on the campaign, the
+line item or the card type. For trend buys, intermittent delivery is the only observable difference,
+and it is also precisely what a genuinely broken campaign looks like, so auto-detecting it would
+trade a false alarm for a silent failure. Names do not help either, since the campaigns most likely
+to be misread are the unrenamed ones.
 
 **Labels are keyed by ad account, not by rep** — the only thing in the store that is. How a campaign
 is bought is a fact about the advertiser, so one rep labelling a Trend Genius buy fixes the verdict
@@ -419,13 +424,35 @@ sees nothing — but nothing here touches the Ads API for its own sake, so the r
 `GET /accounts/:id/campaigns?campaign_ids=…&count=1` to apply exactly the gate X would have applied
 to a data read.
 
-A label changes the alarm, not the arithmetic. `computePacing()` skips the `dark`/`idle`
-short-circuit, swaps the lever to `coverage`, and the row shows how the campaign is bought instead of
-a status; the bar loses its colour and the row drops below everything still worth acting on. The
-spend share, the shortfall and **Budget at risk** all stay exactly as they were, because a commitment
-that is not being triggered often enough really may go unspent. Demo mode seeds the same bursty shape
-twice — labelled on Harborline, unlabelled on Lumen — so both verdicts are visible, and the demo suite
-asserts both.
+`parseCampaignLabelKind()` reads stored rows, and exists for one retired value: `notification` was an
+earlier second label, for subscription-notification buys, and it suppressed the pacing alarm. It was
+replaced once it turned out those campaigns do not actually switch on and off — the thing worth
+recording about them is the custom unit they are built on — so stored rows are read back as `l4r`
+rather than dropped, which would discard a rep's work. Unknown values are dropped, so a label written
+by a newer build cannot make an older one report a verdict it does not understand.
+
+#### What the trend label changes
+
+`computePacing()` skips the `dark`/`idle` short-circuit, swaps the lever to `coverage`, and the row
+shows how the campaign is bought instead of a status; the bar loses its colour and the row drops below
+everything still worth acting on. The spend share, the shortfall and **Budget at risk** all stay
+exactly as they were, because a commitment that is not being triggered often enough really may go
+unspent. Demo mode seeds the same bursty shape twice — labelled on Harborline, unlabelled on Lumen —
+so both verdicts are visible, and the demo suite asserts both.
+
+#### What the custom labels change
+
+Nothing about pacing, deliberately. A custom unit that stops spending keeps its red badge, its budget
+advice and its place in the list of things to check, and shows its label *beside* the verdict rather
+than instead of it. Somebody paid to build that unit, which makes a pacing problem on it worse rather
+than more forgivable. Lumen's "Launch Thread — Custom Unit" is behind pace with a binding cap for
+exactly this reason, so the demo carries the case and the suite asserts it still reads
+`raise-budget`.
+
+What they change is in `buildBenchmark()`: when the campaign under review is custom, the brand's
+other custom campaigns on the objective are held out of the cohort, so the comparison answers "is
+this unit better than our regular buys" rather than a mixture of that and "better than our other
+custom units". See the benchmark section below.
 
 ## Versus the brand's own history
 
@@ -443,6 +470,31 @@ $200 campaign is not an equal opinion to a $1.8M one. Baselines are restricted t
 actually delivered when enough cohort campaigns overlap it, and fall back to the full window with a
 note when they do not. Volume is shown without a delta on purpose: one campaign against a cohort of
 five renders as "94% worse", which is arithmetic, not a finding.
+
+### Custom creative against regular buys
+
+When the campaign under review carries an `l4r` or `custom` label, the cohort is narrowed to the
+brand's **standard** campaigns on the objective. That is the comparison the label exists to make: a
+baseline containing the brand's other custom units answers a mixture of "is custom better than
+regular" and "is this custom unit better than our other custom units", and only the first is a
+question anybody asked.
+
+The narrowing is **one-directional**. A standard campaign's baseline is still everything the brand ran
+on the objective, custom units included, which is what it was before labels existed — so adding a
+label changes the campaign you labelled and nothing else.
+
+`customComparison` carries the kind and a count of what was held out, counted across both the recent
+window and the lookback so the number is the real one. The panel renders it as a `L4R vs standard`
+badge on the figures and a note naming the count: a rep repeating "50% cheaper per engagement" to an
+advertiser needs to know it is cheaper than the brand's *regular* buys, and how many campaigns stand
+behind that. The note is rendered with a `no-cohort` failure too, since "no comparable campaign" and
+"no comparable standard campaign, and here is how many custom ones we set aside" send a rep looking
+in different places.
+
+Labels reach `buildBenchmark()` as a map rather than off each row's pacing verdict, because the
+lookback's older campaigns never get a verdict and have to be filtered by the same rule. A failure to
+read them is not fatal: the cohort falls back to every campaign on the objective, so a database blip
+costs precision rather than the panel.
 
 ### Ranges, and why there are two baseline numbers
 

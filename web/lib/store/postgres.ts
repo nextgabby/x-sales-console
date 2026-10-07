@@ -1,5 +1,6 @@
 import { db, ensureSchema } from "../db";
-import type { CampaignLabelKind, StoreBackend, StoredUser } from "./types";
+import { parseCampaignLabelKind } from "./types";
+import type { StoreBackend, StoredUser } from "./types";
 
 /** The hosted backend. Every method bootstraps the schema first, so a cold database self-heals. */
 
@@ -189,13 +190,20 @@ export const postgresBackend: StoreBackend = {
       set_by: string | null;
       set_at: Date;
     }>(`SELECT * FROM campaign_labels WHERE account_id = $1`, [accountId]);
-    return rows.map((row) => ({
-      accountId: row.account_id,
-      campaignId: row.campaign_id,
-      kind: row.kind as CampaignLabelKind,
-      setBy: row.set_by,
-      setAt: row.set_at.toISOString(),
-    }));
+    return rows.flatMap((row) => {
+      // A retired or unknown kind is dropped here rather than carried as a label nothing handles.
+      const kind = parseCampaignLabelKind(row.kind);
+      if (!kind) return [];
+      return [
+        {
+          accountId: row.account_id,
+          campaignId: row.campaign_id,
+          kind,
+          setBy: row.set_by,
+          setAt: row.set_at.toISOString(),
+        },
+      ];
+    });
   },
 
   async putCampaignLabel(label) {

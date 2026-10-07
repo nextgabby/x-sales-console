@@ -152,7 +152,7 @@ const SEASONAL = [0.82, 1.04, 1.06, 1.05, 1.02, 0.95, 0.84];
 const SEASONAL_MEAN = SEASONAL.reduce((total, value) => total + value, 0) / SEASONAL.length;
 
 /** Entity ids in the Ads API are short base-36-looking strings; these follow the same shape. */
-function entityId(prefix: string, key: string): string {
+export function entityId(prefix: string, key: string): string {
   return `${prefix}${hash(key).toString(36).slice(0, 5).padEnd(5, "0")}`;
 }
 

@@ -9,6 +9,7 @@ import {
   totalsFrom,
   type MetricSeries,
 } from "./stats";
+import { buildTargeting } from "./targeting";
 import { buildRange, microsToCurrency } from "./time";
 import type { XCredentials } from "../store";
 import type { Actor } from "../auth/actor";
@@ -136,6 +137,22 @@ export async function buildCampaignDetail(options: {
   const lineItemIds = lineItems.map((item) => item.id);
 
   /**
+   * Started rather than awaited, so the two requests behind it overlap with the creative and stats
+   * fetches instead of adding their own round trip to the drawer's load.
+   *
+   * Deleted line items are left out, unlike everywhere else here: the rows below keep a retired
+   * line item that still holds spend, because the money is real, but what a dead line item used to
+   * target is not part of what this campaign targets now.
+   */
+  const targetingPromise = buildTargeting({
+    credentials,
+    accountId,
+    lineItemIds: lineItems.filter((item) => !item.deleted).map((item) => item.id),
+    asUser,
+    actor,
+  });
+
+  /**
    * Scoped by `line_item_ids`, not fetched wholesale and filtered. Paging every promoted tweet
    * in the account is the same mistake that cost ~20s on the line item lookup, and a large
    * advertiser has far more creatives than campaigns.
@@ -260,11 +277,12 @@ export async function buildCampaignDetail(options: {
     ...new Set(enriched.map((post) => post.tweetId).filter(Boolean)),
   ] as string[];
 
-  const [, previews] = await Promise.all([
+  const [, previews, targeting] = await Promise.all([
     hydratePosts({ rows: enriched, credentials }),
     includePreviews
       ? fetchPreviews({ accountId, tweetIds, credentials, asUser, audit })
       : Promise.resolve(new Map<string, string>()),
+    targetingPromise,
   ]);
 
   for (const post of enriched) {
@@ -297,6 +315,7 @@ export async function buildCampaignDetail(options: {
     spendSeries: dailySpend(campaignSeries),
     lineItems: rows,
     promotedPosts: posts,
+    targeting,
     warnings,
   };
 }

@@ -16,6 +16,7 @@ import { CreativeList } from "./creative-list";
 import { AudiencePanel } from "./audience-panel";
 import { InsightsPanel } from "./insights-panel";
 import { PlatformPanel } from "./platform-panel";
+import { TargetingPanel } from "./targeting-panel";
 import type { CampaignDetailPayload } from "./types";
 
 const CREATIVE_SUGGESTIONS = [
@@ -23,6 +24,13 @@ const CREATIVE_SUGGESTIONS = [
   "Rank by best overall performance, not just CTR.",
   "Why is the top creative beating the others?",
   "How would you optimize the weakest ones?",
+];
+
+const TARGETING_SUGGESTIONS = [
+  "Is this targeting too narrow for the objective?",
+  "What would you recommend changing, and why?",
+  "Which line item's targeting is working best?",
+  "How would you explain this setup to the advertiser?",
 ];
 
 export function CampaignDrawer({
@@ -206,6 +214,28 @@ export function CampaignDrawer({
                 timezone={timezone}
                 currency={data.currency}
               />
+
+              {/*
+                Above the audience panel, which reports who the delivery actually reached: intent
+                then outcome is the order a rep walks an advertiser through, and the disagreement
+                between the two is usually the reason for the call.
+              */}
+              <TargetingPanel targeting={data.targeting} />
+
+              {/* Nothing to advise on when no line item carries any criteria; the panel says so. */}
+              {data.targeting.status === "ok" ? (
+                <AskGrok
+                  endpoint={`/api/accounts/${accountId}/campaigns/${campaignId}/targeting-summary`}
+                  body={{ asUser, days, timezone }}
+                  title="Ask Grok about this targeting"
+                  description="Grounded in the criteria above, which are read from the Ads API rather than inferred."
+                  primaryLabel="Review targeting"
+                  emptyState="Nothing generated yet. Review the targeting, or ask whether it fits the objective."
+                  suggestions={TARGETING_SUGGESTIONS}
+                  askPlaceholder="Ask about this targeting…"
+                  unconfiguredHint="Add your own xAI API key to review this targeting and get recommendations."
+                />
+              ) : null}
 
               <AudiencePanel
                 accountId={accountId}

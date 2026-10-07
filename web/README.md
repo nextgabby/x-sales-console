@@ -583,6 +583,41 @@ the rest of the buy" — both arithmetically true, both an invitation to move mo
 A single platform carrying everything now says so directly. With nothing to say the panel renders
 nothing.
 
+## Targeting, and the four things the API does not tell you plainly
+
+`lib/x/targeting.ts` reads back what a campaign is set to target, which is the declared counterpart to
+the inferred audience above. Targeting lives on the line item, so a campaign's targeting is the union
+of its line items' — and `TargetingValue` carries the line item ids rather than a count, because the
+panel needs the count and the Grok prompt needs to invert it.
+
+**It is cheap, despite the documented rate limit.** `GET /targeting_criteria` takes up to 200
+`line_item_ids` in one call, so a campaign is one request. The docs put targeting criteria in a
+400-per-15-minutes *category*, but a live probe showed it billing against `x-account-rate-limit-limit:
+10000` instead. `with_total_count` is deliberately never sent: it drops the limit to 200 and the total
+is not needed.
+
+**Custom audience criteria are all named the same thing.** Every one comes back as `"Custom audience
+targeting"` — nine identical placeholders on one Call of Duty campaign. Resolving them needs
+`GET /custom_audiences`, and listing the account's audiences does not work: that account has over 200
+and the ones the campaign used were not on the first page. `custom_audience_ids` scopes it to exactly
+the ones referenced, but **only with `with_deleted=true`** — scoped without it the call returns HTTP
+200 and zero rows, which reads as an unsupported parameter rather than what it is. All nine of those
+lists had been deleted, which is the finding the panel now leads with: a campaign targeting a list
+that no longer exists looks fully configured from every other angle.
+
+**Two types hide their meaning in `targeting_value`.** `ENGAGEMENT_TYPE` has `name:
+"RETARGETING_ENGAGEMENT_TYPE"` and `targeting_value: "IMPRESSION"`; `USER_ENGAGEMENT` has `name:
+"USER_ENGAGER_RETARGETING"` and an account id for a value. Taking the `name`, as every other type
+requires, printed the group's own label back at the reader twice over.
+
+**Exclusions are not errors.** `operator_type: "NE"` renders on its own row under "except", in the
+same neutral pill as everything else — red is the house signal for something wrong, and Novig excludes
+Arizona, Maryland, Michigan and Nevada because that is where it may not take bets. The Grok prompt in
+`lib/x/targeting-context.ts` is forbidden outright from recommending their removal, from inferring who
+is inside a custom audience from its name, and from producing audience sizes or reach estimates, none
+of which this tool can see. Verified live: on Novig it recommended nothing; on the Call of Duty
+pipeline test it suggested *restoring* the dead exclusion rather than dropping it.
+
 ## Comparisons, baselines and zero
 
 Three rules the audit established, each of which had been got wrong somewhere:

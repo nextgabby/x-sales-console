@@ -8,6 +8,7 @@ import {
   demoPostByTweetId,
   emptyDay,
   entityDayMetrics,
+  entityId,
   flightDates,
   fundingInstrumentId,
   type DayMetrics,
@@ -505,6 +506,153 @@ function tweetLookupResponse(query: Query) {
   };
 }
 
+type DemoCriterion = { type: string; value: string; name: string; negated?: boolean };
+
+type DemoAudience = { id: string; name: string; size: number; deleted: boolean };
+
+/**
+ * The retargeting lists the demo advertisers own. One is deleted on purpose: a campaign still
+ * targeting a list that no longer exists is the single most useful thing this panel surfaces, and
+ * it is almost impossible to find on demand in a live account.
+ */
+const DEMO_AUDIENCES: DemoAudience[] = [
+  { id: entityId("a", "lapsed-30"), name: "Lapsed Installs | 30 Days", size: 412_000, deleted: false },
+  { id: entityId("a", "high-ltv"), name: "High LTV | Top Decile", size: 86_500, deleted: false },
+  { id: entityId("a", "purchasers"), name: "App Purchasers | All Time", size: 233_900, deleted: false },
+  { id: entityId("a", "spring-crm"), name: "Spring CRM Upload | 2023", size: 0, deleted: true },
+];
+
+const audienceId = (key: string) => entityId("a", key);
+
+/** Country targeting follows the account, matching the `country_code` the account object reports. */
+function baseCriteria(account: DemoAccount): DemoCriterion[] {
+  const uk = account.timezone.startsWith("Europe");
+  return [
+    uk
+      ? { type: "LOCATION", value: "e8c38fa2ac9e2cfa", name: "United Kingdom" }
+      : { type: "LOCATION", value: "96683cc9126741d1", name: "United States" },
+    { type: "AGE", value: "AGE_OVER_18", name: "AGE_OVER_18" },
+    { type: "LANGUAGE", value: "en", name: "English" },
+  ];
+}
+
+/**
+ * Targeting keyed off the campaign name.
+ *
+ * The universe's campaign names already announce what they target — "Interest Targeting — Fitness",
+ * "Lookalike Expansion", "Retargeting — Lapsed 30d" — so deriving criteria from them keeps the
+ * drawer agreeing with the row it was opened from, which is the whole point of generating this
+ * universe from one source. The first match wins, and between them they cover every case the panel
+ * and its signals can render: exclusions, a dead audience, a handle targeted two ways, keywords,
+ * and a campaign with no targeting at all.
+ */
+const TARGETING: Array<[match: RegExp, criteria: DemoCriterion[]]> = [
+  [
+    /Interest Targeting/,
+    [
+      { type: "INTEREST", value: "19004", name: "Fitness and exercise" },
+      { type: "INTEREST", value: "19006", name: "Running" },
+      { type: "INTEREST", value: "19013", name: "Nutrition" },
+      { type: "PLATFORM", value: "0", name: "iOS" },
+    ],
+  ],
+  [
+    /Lookalike/,
+    [
+      /**
+       * The same handle direct and as a lookalike, which is what the overlap signal is for: reps
+       * read the two lines as one audience when they are different people.
+       */
+      { type: "FOLLOWERS_OF_USER", value: "586671909", name: "lumenfitness" },
+      { type: "SIMILAR_TO_FOLLOWERS_OF_USER", value: "586671909", name: "lumenfitness" },
+      { type: "SIMILAR_TO_FOLLOWERS_OF_USER", value: "26257166", name: "stravarunning" },
+    ],
+  ],
+  [
+    /Retargeting|Winback/,
+    [
+      { type: "CUSTOM_AUDIENCE", value: audienceId("lapsed-30"), name: "Custom audience targeting" },
+      { type: "CUSTOM_AUDIENCE", value: audienceId("high-ltv"), name: "Custom audience targeting" },
+      { type: "CUSTOM_AUDIENCE", value: audienceId("spring-crm"), name: "Custom audience targeting" },
+      {
+        type: "CUSTOM_AUDIENCE",
+        value: audienceId("purchasers"),
+        name: "Custom audience targeting",
+        negated: true,
+      },
+      { type: "ENGAGEMENT_TYPE", value: "IMPRESSION", name: "RETARGETING_ENGAGEMENT_TYPE" },
+    ],
+  ],
+  [
+    /Android/,
+    [
+      { type: "PLATFORM", value: "1", name: "Android" },
+      { type: "OS_VERSION", value: "1033", name: "Android 12.0 and above" },
+    ],
+  ],
+  [
+    // The one campaign carrying exclusions, so the signal that names them has something to name.
+    /Autumn Flash Sale/,
+    [
+      { type: "BROAD_KEYWORD", value: "flight deals", name: "flight deals" },
+      { type: "BROAD_KEYWORD", value: "last minute holiday", name: "last minute holiday" },
+      { type: "LOCATION", value: "4ec01d20b82a9fa3", name: "Alaska, US", negated: true },
+      { type: "LOCATION", value: "e17b4a2f0b0b1f32", name: "Hawaii, US", negated: true },
+      { type: "BROAD_KEYWORD", value: "flight cancelled", name: "flight cancelled", negated: true },
+    ],
+  ],
+  [
+    /Pre-Roll/,
+    [
+      { type: "CONTENT_PUBLISHER_USER", value: "1367531", name: "NatGeoTravel" },
+      { type: "IAB_CATEGORY", value: "IAB20", name: "Travel" },
+    ],
+  ],
+  [
+    /Followers/,
+    [
+      { type: "FOLLOWERS_OF_USER", value: "14230524", name: "pitchfork" },
+      { type: "FOLLOWERS_OF_USER", value: "19761086", name: "rollingstone" },
+    ],
+  ],
+  [
+    /New Release|Album Launch|Festival|Catalogue|Spring Tour/,
+    [{ type: "CONVERSATION", value: "music_and_radio", name: "Music and radio" }],
+  ],
+  [
+    /Summer Routes|Coastal|City Breaks|Brand Awareness/,
+    [
+      { type: "CONVERSATION", value: "travel", name: "Travel" },
+      { type: "DEVICE", value: "3f7", name: "iPhone 15" },
+    ],
+  ],
+  [/Clicks/, [{ type: "BROAD_KEYWORD", value: "book now", name: "book now" }]],
+];
+
+/**
+ * A line item's targeting. Every campaign generates a "— Core" and a "— Broad" line item, and that
+ * split is used rather than invented: Broad carries the base layer alone, Core adds the specific
+ * targeting, which is both how a real buy is structured and what makes the panel's "on 1 of 2 line
+ * items" distinction visible.
+ */
+function demoCriteria(
+  account: DemoAccount,
+  campaign: DemoCampaign,
+  lineItem: { name: string },
+): DemoCriterion[] {
+  /**
+   * The untargeted case. A sustain reach buy left wide open is the realistic version of it, and
+   * the signal that warns about unconstrained delivery needs one line item somewhere to fire on.
+   */
+  if (/Brand Reach — Sustain/.test(campaign.name) && /Broad$/.test(lineItem.name)) return [];
+
+  const base = baseCriteria(account);
+  if (!/Core$/.test(lineItem.name)) return base;
+
+  const specific = TARGETING.find(([match]) => match.test(campaign.name))?.[1] ?? [];
+  return [...base, ...specific];
+}
+
 /**
  * Routes one request to the right handler. Throwing on an unrecognised path is deliberate: a
  * silent empty response would surface as a confusing blank panel, whereas this names the gap.
@@ -603,6 +751,59 @@ export function demoAdsRequest(options: {
           deleted: false,
         })),
       );
+    return { data, next_cursor: null };
+  }
+
+  if (rest === "/targeting_criteria") {
+    const wanted = new Set(list(query, "line_item_ids"));
+    const data = account.campaigns
+      .filter((campaign) => campaign.describable)
+      .flatMap((campaign) =>
+        campaign.lineItems
+          .filter((item) => wanted.has(item.id))
+          .flatMap((item) =>
+            demoCriteria(account, campaign, item).map((criterion, index) => ({
+              line_item_id: item.id,
+              name: criterion.name,
+              id: entityId("t", `${item.id}:${criterion.type}:${criterion.value}:${index}`),
+              operator_type: criterion.negated ? "NE" : "EQ",
+              targeting_value: criterion.value,
+              targeting_type: criterion.type,
+              deleted: false,
+              created_at: "2024-02-04T11:20:00Z",
+              updated_at: "2024-02-04T11:20:00Z",
+            })),
+          ),
+      );
+    return { data, next_cursor: null };
+  }
+
+  if (rest === "/custom_audiences") {
+    /**
+     * Only ever answered scoped by id here, which is how `buildTargeting` asks: the unscoped list
+     * is a real endpoint but nothing in the app calls it, and inventing an account-wide audience
+     * library to answer a request no one makes is fixture drift waiting to happen.
+     */
+    const wanted = list(query, "custom_audience_ids");
+    const data = wanted
+      .map((id) => DEMO_AUDIENCES.find((audience) => audience.id === id))
+      .filter((audience): audience is DemoAudience => Boolean(audience))
+      .map((audience) => ({
+        targetable: !audience.deleted,
+        name: audience.name,
+        targetable_types: ["CRM", "EXCLUDED_CRM"],
+        audience_type: "CRM",
+        description: null,
+        permission_level: "READ_WRITE",
+        owner_account_id: account.id,
+        id: audience.id,
+        reasons_not_targetable: audience.deleted ? ["AUDIENCE_TOO_SMALL"] : [],
+        created_at: "2023-11-02T09:00:00Z",
+        updated_at: "2024-03-19T16:41:00Z",
+        partner_source: null,
+        deleted: audience.deleted,
+        audience_size: audience.size,
+      }));
     return { data, next_cursor: null };
   }
 

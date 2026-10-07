@@ -4,6 +4,7 @@
  */
 import type { Totals } from "@/lib/x/stats";
 import type { CampaignPacing } from "@/lib/x/pacing";
+import type { TargetingSummary } from "@/lib/x/targeting";
 
 export type CampaignRow = {
   id: string;
@@ -152,5 +153,7 @@ export type CampaignDetailPayload = {
   spendSeries: number[];
   lineItems: LineItemRow[];
   promotedPosts: PromotedPostRow[];
+  /** What the campaign is set to target, as against `AudienceBreakdown`, which is who it reached. */
+  targeting: TargetingSummary;
   warnings: string[];
 };

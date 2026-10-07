@@ -12,7 +12,7 @@ import type { ChatMessage } from "../grok";
  * is the part people screenshot, and a figure in a screenshot has to carry its own disclaimer.
  */
 
-type Feature = "compare" | "benchmark" | "creative";
+type Feature = "compare" | "benchmark" | "creative" | "targeting";
 
 /**
  * Which panel asked. Keyed off wording unique to each system prompt in `lib/x/*-context.ts`, so a
@@ -23,6 +23,7 @@ function featureOf(messages: ChatMessage[]): Feature | null {
   const system = messages.find((message) => message.role === "system")?.content ?? "";
   if (system.includes("own recent history")) return "benchmark";
   if (system.includes("ad creatives")) return "creative";
+  if (system.includes("review the targeting")) return "targeting";
   if (system.includes("prepare for a conversation")) return "compare";
   return null;
 }
@@ -58,6 +59,14 @@ What this does not tell you is whether the figure is good for the category. The 
 The pattern across the posts points at length. The shorter copy is winning on click-through at similar delivery, and the longer variant explaining the offer in detail is the weakest of the set — the detail is doing work that the landing page could do instead. The broad-reach post sits between the two, which is consistent with a targeting difference rather than a creative one.
 
 The cheap test is to cut the long variant and put its budget behind the headline creative for a week. If the campaign's blended click-through rate rises by roughly what the arithmetic predicts, length was the cause; if it does not, the difference was audience overlap and the creative conclusion was wrong.`,
+
+  targeting: `${SAMPLE}The campaign is built as a narrow core and a broad companion: the core line item carries the audience and interest layers, while the broad one runs on geography, age and language alone. Both are limited to adults in one country, and the exclusions on the campaign stay as they are.
+
+- One of the retargeting lists has been deleted, so it is contributing nothing while still appearing in the setup. Worth confirming with the advertiser whether it was meant to be replaced or dropped.
+- The core and broad line items are not comparable on price, because they are not buying the same audience. If the broad line item is cheaper, that is the auction rather than a better audience.
+- The interest layer sits on the core line item only. Before widening it, check whether the core is budget-constrained — adding audience to a line item that is already capped moves cost without adding volume.
+
+None of this is a change to make on the call. It is the shape of the buy, and the question to put to the advertiser is which of the two line items they actually want the money in.`,
 };
 
 const GENERIC = `${SAMPLE}The figures in this demo are generated, so there is no real pattern here to explain — a live deployment would answer this against the advertiser's own data, citing the specific campaigns and dates behind each claim.

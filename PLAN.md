@@ -513,6 +513,55 @@ Each line is gated, because an insight that states a rounding artefact is worse 
 Placing it above the charts rather than below them is the point: the charts justify the sentences,
 they are not the conclusion the rep has to reach on their own.
 
+## 5f. What it was set to reach — targeting and recommendations
+
+Asked for as "a list of what targeting they already have in place and then a recommendation based
+off of that if needed". It sits directly above the audience panel, because the pair is the
+conversation: **what the advertiser asked for, then who the delivery actually landed on.**
+
+Targeting lives on the line item, not the campaign, so a campaign's targeting is the union of its
+line items'. The panel says which is which — a criterion carried by one of two line items is marked
+`1/2` — because "United States on one of four line items" is a different buy from one targeting it
+throughout. Deleted line items are excluded, unlike elsewhere in the drawer: a retired line item
+that still holds spend keeps its row because the money is real, but what a dead line item used to
+target is not part of what this campaign targets now.
+
+**It costs at most two requests per campaign**, both cheap. `GET /targeting_criteria` takes up to 200
+`line_item_ids` at once, which is every campaign seen so far, and bills against the ad-account's
+10,000 limit rather than the 400-per-15-minutes category the docs imply. `with_total_count` is
+deliberately not sent: it would drop the limit to 200.
+
+**Custom audiences were the one real gap.** Every `CUSTOM_AUDIENCE` criterion comes back named
+`"Custom audience targeting"` — nine identical placeholders on one Call of Duty campaign — so the
+names come from a second call. Listing the account's audiences does not work: that account has over
+200 and the ones this campaign used were not on the first page. Scoping by `custom_audience_ids`
+*plus* `with_deleted=true` resolves exactly the ones referenced, and the `with_deleted` is the part
+that matters, because all nine of those lists have since been deleted. **A campaign still targeting
+a list that no longer exists looks fully configured from every other angle**, and it is close to
+impossible to find on purpose — so it is called out by name.
+
+Two further API shapes, both found by probing rather than reading: `ENGAGEMENT_TYPE` names itself
+`RETARGETING_ENGAGEMENT_TYPE` and carries `IMPRESSION` in `targeting_value`, and `USER_ENGAGEMENT`
+names itself `USER_ENGAGER_RETARGETING` and carries an account id. Taking the `name` for either
+printed the group's own label back at the reader twice over.
+
+The signals under the list follow `buildInsights`: arithmetic over the criteria, never a model, and
+each one states a fact rather than a judgement — untargeted line items, a count of exclusions, dead
+audiences, and the same handle targeted both directly and as a lookalike.
+
+**Exclusions are the reason the Grok prompt is longer than the others.** A negated criterion looks
+like a mistake and is usually a regulator: Novig excludes Arizona, Maryland, Michigan and Nevada
+because that is where it may not take bets. A model told to optimise reach will suggest removing
+them. So the prompt forbids it outright, forbids inferring who is inside a custom audience from its
+name, forbids inventing audience sizes or reach estimates — none of which this tool can see — and
+caps recommendations at three while explicitly permitting none. Delivered demographics are left out
+rather than fetched: they come from the segmented async jobs, which can take most of a minute, and a
+rep pressing the button should not wait for two of them before the first token arrives.
+
+Verified live: on Novig it recommended nothing and said the exclusions were deliberate; on the Call
+of Duty pipeline test it led with the eight dead inclusion lists and suggested **restoring** the dead
+exclusion rather than dropping it.
+
 ## 6. Compare mode
 
 Multi-select campaigns, then open a comparison view with:
@@ -938,3 +987,11 @@ and running it surfaced two real bugs that no live account could reach.
 - **The panel and its AI summary disagreed.** Only the panel's endpoint attempted the lookback, so a
   campaign whose history was all older than 90 days showed a full comparison on screen with a summary
   beside it refusing to discuss it. Both now go through `buildBenchmarkWithLookback`.
+
+Demo targeting is derived from the campaign names, which already announce it — "Interest Targeting —
+Fitness", "Lookalike Expansion", "Retargeting — Lapsed 30d" — so the panel agrees with the row it was
+opened from for the same reason the figures do. Each campaign's "— Core" line item carries the
+specific targeting and its "— Broad" one the base geo/age/language layer, which is both how a real
+buy is structured and what makes the "on 1 of 2 line items" distinction visible. Between them the
+four advertisers cover every case the panel can render, including the two that are hardest to find
+live: a deleted custom audience, and a line item with no criteria at all.

@@ -154,7 +154,80 @@ print(a['status']=='ok' and ctrs[0]>ctrs[-1]*1.5
       and len(unknown)==1 and 0.01 < unknown[0]['share'] < 0.1)
 ")"
 
+echo "== targeting =="
+RT=$(python3 -c "
+import json
+d=json.load(open('/tmp/v-d1.json'))
+print([r['id'] for r in d['campaigns'] if r['name'].startswith('Retargeting')][0])
+")
+curl -s "$B/api/accounts/18ce5dem0001/campaigns/$RT?days=30" > /tmp/v-tgt.json
+check "custom audience ids resolve to names, and the dead list is flagged" "$(python3 -c "
+import json
+t=json.load(open('/tmp/v-tgt.json'))['targeting']
+g=[x for x in t['groups'] if x['type']=='CUSTOM_AUDIENCE'][0]
+names={v['label'] for v in g['included']}
+dead=[v for v in g['included'] if v.get('missing')]
+print(t['status']=='ok'
+      and 'Lapsed Installs | 30 Days' in names
+      and len(dead)==1 and dead[0]['label']=='Spring CRM Upload | 2023'
+      and [v['label'] for v in g['excluded']]==['App Purchasers | All Time'])
+")"
+check "the exclusion is reported without being called a mistake" "$(python3 -c "
+import json
+t=json.load(open('/tmp/v-tgt.json'))['targeting']
+s=[x for x in t['signals'] if x['title'].endswith('exclusions') or x['title'].endswith('exclusion')]
+print(len(s)==1 and 'deliberate' in s[0]['detail'])
+")"
+check "country applies to every line item, the audiences to one" "$(python3 -c "
+import json
+t=json.load(open('/tmp/v-tgt.json'))['targeting']
+loc=[x for x in t['groups'] if x['type']=='LOCATION'][0]['included'][0]
+aud=[x for x in t['groups'] if x['type']=='CUSTOM_AUDIENCE'][0]['included'][0]
+print(t['lineItems']==2 and loc['everywhere'] is True and len(loc['lineItemIds'])==2
+      and aud['everywhere'] is False and len(aud['lineItemIds'])==1)
+")"
+check "raw enums are humanised, not echoed back as the group label" "$(python3 -c "
+import json
+t=json.load(open('/tmp/v-tgt.json'))['targeting']
+eng=[x for x in t['groups'] if x['type']=='ENGAGEMENT_TYPE'][0]
+age=[x for x in t['groups'] if x['type']=='AGE'][0]
+print(eng['label']=='Engagement retargeting'
+      and [v['label'] for v in eng['included']]==['Impression']
+      and [v['label'] for v in age['included']]==['18 and over'])
+")"
+SUS=$(python3 -c "
+import json
+d=json.load(open('/tmp/v-d1.json'))
+print([r['id'] for r in d['campaigns'] if r['name']=='Brand Reach — Sustain'][0])
+")
+curl -s "$B/api/accounts/18ce5dem0001/campaigns/$SUS?days=30" > /tmp/v-tgt2.json
+check "a line item with no criteria is counted and named as unconstrained" "$(python3 -c "
+import json
+t=json.load(open('/tmp/v-tgt2.json'))['targeting']
+s=[x for x in t['signals'] if 'untargeted' in x['title']]
+print(t['untargetedLineItems']==1 and len(s)==1 and 'unconstrained' in s[0]['detail'])
+")"
+LK=$(python3 -c "
+import json
+d=json.load(open('/tmp/v-d1.json'))
+print([r['id'] for r in d['campaigns'] if r['name'].startswith('Lookalike')][0])
+")
+curl -s "$B/api/accounts/18ce5dem0001/campaigns/$LK?days=30" > /tmp/v-tgt3.json
+check "a handle targeted directly and as a lookalike is called out once" "$(python3 -c "
+import json
+t=json.load(open('/tmp/v-tgt3.json'))['targeting']
+s=[x for x in t['signals'] if 'lookalike' in x['title']]
+print(len(s)==1 and '@lumenfitness' in s[0]['detail'])
+")"
+
 echo "== AI =="
+check "targeting review returns labelled sample text" "$(
+curl -s -X POST "$B/api/accounts/18ce5dem0001/campaigns/$RT/targeting-summary" -H 'content-type: application/json' --data @/tmp/v-body-empty.json > /tmp/v-trev.txt
+python3 -c "
+t=open('/tmp/v-trev.txt').read()
+print('Sample response' in t and 'broad companion' in t)
+"
+)"
 check "creative summary returns labelled sample text" "$(
 curl -s -X POST "$B/api/accounts/18ce5dem0002/campaigns/$CID/creative-summary" -H 'content-type: application/json' --data @/tmp/v-body-summary.json > /tmp/v-cre.txt
 python3 -c "

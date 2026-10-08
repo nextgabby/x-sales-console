@@ -10,6 +10,7 @@ import {
   formatUnitCost,
   titleCase,
 } from "@/lib/format";
+import { CAMPAIGN_LABEL_NAME, isBursty } from "@/lib/store/types";
 import type { CampaignRow } from "./types";
 
 type Column = {
@@ -213,6 +214,9 @@ export function CampaignTable({
                   <div className="mt-1 flex items-center gap-1.5">
                     <StatusBadge row={row} />
                     <PaceBadge row={row} />
+                    {row.pacing.label ? (
+                      <Badge tone="accent">{CAMPAIGN_LABEL_NAME[row.pacing.label]}</Badge>
+                    ) : null}
                     {row.objective ? (
                       <span className="text-[11px] text-muted">
                         {titleCase(row.objective)}
@@ -262,8 +266,14 @@ export function CampaignTable({
 /**
  * Only the pacing problems appear here. Repeating "on pace" on every healthy row would add a
  * badge to most of the table and make the ones that matter harder to spot.
+ *
+ * A bursty label suppresses the badge entirely, the same way the pacing panel does. The status
+ * itself survives the label — the shortfall arithmetic is still real and still reported — but
+ * calling a trend buy "behind pace" in the table while the panel below declines to is worse than
+ * either answer on its own, and the label beside it says why there is no verdict.
  */
 function PaceBadge({ row }: { row: CampaignRow }) {
+  if (isBursty(row.pacing.label)) return null;
   switch (row.pacing.status) {
     case "dark":
       return <Badge tone="negative">Stopped</Badge>;

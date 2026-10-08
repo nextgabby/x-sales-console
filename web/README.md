@@ -431,6 +431,19 @@ recording about them is the custom unit they are built on — so stored rows are
 rather than dropped, which would discard a rep's work. Unknown values are dropped, so a label written
 by a newer build cannot make an older one report a verdict it does not understand.
 
+#### Where the label shows
+
+On the campaign's own row in **Campaigns**, beside its status, and on its row in **Budget pacing** —
+whichever list a rep happens to be reading, the same row explains itself. The label control lives in
+the drawer, but somebody scanning the table should not have to open a campaign to find out that the
+flat stretch in its sparkline is how the buy works.
+
+The two lists make the same suppression decision for a bursty label: no pace badge, the label in its
+place. The status itself still exists on the row data — the shortfall arithmetic is real and still
+reported — so this is a presentation rule applied in two components, and getting it wrong in one of
+them would have the table calling a trend buy "behind pace" while the panel below it declines to,
+which is worse than either answer alone.
+
 #### What the trend label changes
 
 `computePacing()` skips the `dark`/`idle` short-circuit, swaps the lever to `coverage`, and the row

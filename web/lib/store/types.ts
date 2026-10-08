@@ -80,6 +80,16 @@ export type AiConfig = {
  */
 export type CampaignLabelKind = "trend-genius" | "l4r" | "custom";
 
+/**
+ * What each label is called on screen, kept beside the kinds because more than one panel shows them
+ * and two spellings of "L4R" in the same drawer would read as two different things.
+ */
+export const CAMPAIGN_LABEL_NAME: Record<CampaignLabelKind, string> = {
+  "trend-genius": "Trend Genius",
+  l4r: "L4R",
+  custom: "Custom",
+};
+
 /** Labels that mean the campaign delivers in bursts, and so must not be paced against a daily rate. */
 export function isBursty(kind: CampaignLabelKind | null): boolean {
   return kind === "trend-genius";

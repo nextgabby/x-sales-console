@@ -322,6 +322,13 @@ const LUMEN: CampaignSpec[] = [
    */
   { key: "l4r-drop", name: "Drop Alerts — Subscribers", objective: "ENGAGEMENTS", startDaysAgo: 50, dailyImpressions: 210_000, cpm: 6.4, ctr: 0.0094, engagementRate: 0.055 },
   /**
+   * The peer for the campaign above, and deliberately the better of the two. A rep opening "Drop
+   * Alerts" sees it beat every standard buy on the account and still come second among the
+   * advertiser's own L4Rs, which is the pair of readings the two baselines exist to separate: one
+   * is what gets quoted to the client, the other decides which unit to build next.
+   */
+  { key: "l4r-restock", name: "Restock Alerts — Subscribers", objective: "ENGAGEMENTS", startDaysAgo: 29, dailyImpressions: 140_000, cpm: 6.1, ctr: 0.0101, engagementRate: 0.064 },
+  /**
    * The second custom unit is deliberately behind pace with its cap binding, which is the case
    * that proves a custom label is not an excuse. It keeps its red "Behind" badge and its "raise the
    * daily budget" advice, and shows the "Custom" badge beside them rather than instead of them: a
@@ -329,6 +336,7 @@ const LUMEN: CampaignSpec[] = [
    * doing the same, because somebody built it specially.
    */
   { key: "custom-thread", name: "Launch Thread — Custom Unit", objective: "ENGAGEMENTS", startDaysAgo: 36, endDaysAgo: -16, totalBudgetMultiple: 1.5, capUse: 0.97, dailyImpressions: 120_000, cpm: 8.2, ctr: 0.0081, engagementRate: 0.042 },
+  { key: "custom-poll", name: "Poll Unit — Community Pick", objective: "ENGAGEMENTS", startDaysAgo: 55, dailyImpressions: 100_000, cpm: 7.6, ctr: 0.0069, engagementRate: 0.036 },
 ];
 
 /**

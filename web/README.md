@@ -491,6 +491,46 @@ behind that. The note is rendered with a `no-cohort` failure too, since "no comp
 "no comparable standard campaign, and here is how many custom ones we set aside" send a rep looking
 in different places.
 
+### The same label against itself
+
+`peerComparison` is a second baseline built from the campaigns carrying the *same* label — L4R
+against L4R, Custom against Custom. The campaigns held out of the standard cohort are not thrown
+away: those sharing the label become a cohort of their own, and every metric gains `peer` and
+`peerDelta` beside the existing `baseline` and `delta`, so each row answers both questions at once.
+
+They often disagree, which is the point. The demo account's `Drop Alerts` is 50% cheaper per
+engagement than Lumen's standard buys and 25% dearer than Lumen's other L4R. The first figure is what
+a rep quotes to the advertiser, the second is what Creative Strategy needs to hear, and neither is a
+correction of the other.
+
+Three things the peer cohort deliberately does *not* do:
+
+- **No bands.** A usual range across one or two campaigns is noise with error bars. `peer` is a
+  single weighted figure, and the panel and prompt both say how many campaigns are behind it.
+- **No promotion.** A custom campaign whose only siblings on the objective are other custom campaigns
+  still returns `no-cohort`; the peer cohort never becomes the primary baseline. `peerComparison` is
+  carried into that return anyway, so the panel can say the peers exist without implying they are a
+  norm.
+- **No cross-label mixing.** An `l4r` campaign's peers are `l4r` only. A `custom` sibling is held out
+  of the standard baseline *and* left out of the peer one, because "bespoke" is not a format.
+
+The peer series is restricted to the campaign's own days whenever the main basis is `concurrent`, so
+the two percentages on a row describe the same stretch of auction conditions rather than one being
+same-days and the other all-time. A peer value is `null`, not zero, when that cohort has no
+denominator for the metric.
+
+### Cost per like and cost per repost
+
+Two metrics appended only for custom-labelled campaigns, in `metricsFor(objective, custom)`, which
+dedupes against the objective's own list. Cost per engagement cannot distinguish these buys from any
+other, because `engagements` counts a link click, a card expand and a like as one each. A like is the
+whole mechanic of an L4R and reposts are the earned reach a bespoke unit is commissioned to produce,
+so these are what the units are sold on. `likes` and `retweets` were already in `RAW_METRICS` and
+ride along in the `ENGAGEMENT` group, so the two figures cost no extra calls. They are left off a
+standard buy, which is not sold on them.
+
+### How labels get in
+
 Labels reach `buildBenchmark()` as a map rather than off each row's pacing verdict, because the
 lookback's older campaigns never get a verdict and have to be filtered by the same rule. A failure to
 read them is not fatal: the cohort falls back to every campaign on the objective, so a database blip

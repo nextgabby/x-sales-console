@@ -254,6 +254,17 @@ export type Totals = {
   /** Cost per follow, the KPI for follower objectives. `follows` rides along in ENGAGEMENT. */
   cpf: number;
   /**
+   * Cost per like and per repost, which the engagement total hides.
+   *
+   * `engagements` counts every interaction alike — a link click, a card expand and a like are one
+   * each — so cost per engagement cannot distinguish a unit bought for amplification from one
+   * bought for clicks. These two can, and they are what the custom units are actually sold on: a
+   * like is the whole mechanic of an L4R buy, and reposts are the earned reach a bespoke unit is
+   * commissioned to produce. Both ride along in the ENGAGEMENT group already being requested.
+   */
+  costPerLike: number;
+  costPerRepost: number;
+  /**
    * App conversions, present only when MOBILE_CONVERSION was requested. `installs` is the sum of
    * the two attributions the API populates, because it publishes no total of its own.
    */
@@ -284,6 +295,8 @@ export function totalsFrom(series: MetricSeries): Totals {
   const clicks = sum(series.clicks);
   const videoViews = sum(series.video_total_views);
   const follows = sum(series.follows);
+  const likes = sum(series.likes);
+  const retweets = sum(series.retweets);
   const installsPostView = sum(series.installs_post_view);
   const installsPostEngagement = sum(series.installs_post_engagement);
   const installs = installsPostView + installsPostEngagement;
@@ -294,8 +307,8 @@ export function totalsFrom(series: MetricSeries): Totals {
     impressions,
     engagements,
     clicks,
-    likes: sum(series.likes),
-    retweets: sum(series.retweets),
+    likes,
+    retweets,
     replies: sum(series.replies),
     follows,
     videoViews,
@@ -311,6 +324,8 @@ export function totalsFrom(series: MetricSeries): Totals {
     viewRate: ratio(videoViews, impressions),
     cpv: ratio(spend, videoViews),
     cpf: ratio(spend, follows),
+    costPerLike: ratio(spend, likes),
+    costPerRepost: ratio(spend, retweets),
     installs,
     installsPostView,
     installsPostEngagement,

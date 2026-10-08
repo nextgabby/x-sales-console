@@ -484,6 +484,29 @@ Nothing in the API names these units — not the campaign, not the line item, no
 the label is the only thing that makes the cohort knowable, and the Grok prompt is told both to state
 the narrowed basis and to say nothing about the held-out campaigns beyond how many there were.
 
+**And is this one the best of its kind?** A second, separate baseline, built from the campaigns
+carrying the *same* label — L4R against L4R, Custom against Custom. The held-out campaigns do not
+disappear; the ones sharing the label are gathered into a cohort of their own and every metric row
+carries a figure against both. The two readings are different questions and often disagree: the demo
+account's "Drop Alerts" buys engagement 50% cheaper than Lumen's standard campaigns and is still 25%
+dearer than the brand's other L4R. The first number is what gets quoted to the advertiser; the second
+decides which unit Creative Strategy builds next, and collapsing them into one would lose whichever
+answer the rep needed.
+
+Peer figures carry no range. These cohorts are small by nature — usually one or two campaigns — and a
+usual range drawn from two campaigns would dress up a coin flip as a distribution. The peer cohort is
+restricted to the same days as the campaign under review whenever the main baseline is, so both
+percentages describe the same stretch of auction conditions. The prompt is told the peer count, told
+to keep the two comparisons apart, and told never to average them or treat either as a correction of
+the other.
+
+Likes and reposts get priced for custom units, as cost per like and cost per repost, because cost per
+engagement cannot tell these buys apart from any other: a link click, a card expand and a like each
+count as one engagement. A like is the whole mechanic of an L4R, and reposts are the earned reach a
+bespoke unit is commissioned to produce, so those are the numbers the units are actually sold on.
+Both metrics ride along in the `ENGAGEMENT` group already being requested, so they cost nothing, and
+they appear only on custom-labelled campaigns — a standard buy is not sold on them.
+
 ## 5d. Where it ran — platform breakdown and Spotlight
 
 The drawer shows the same money split by device, which is the cut an optimization conversation

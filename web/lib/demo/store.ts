@@ -55,9 +55,11 @@ export const DEMO_SPY_GRANTS: SpyGrant[] = DEMO_ACCOUNTS.filter(
  * Harborline's trend buy reads as intermittent by design, and Lumen's "Live Moments" is still
  * reported as a campaign that stopped delivering, which is the problem the label exists to fix.
  *
- * Both of Lumen's custom units are labelled, because that comparison needs two to be worth looking
- * at. Reviewing either one holds the other out of the baseline, which is the behaviour that cannot
- * be seen with a single custom campaign on the account.
+ * Lumen carries two of each custom label, which is the smallest number that shows both comparisons
+ * at once. Reviewing an L4R holds all four custom campaigns out of the standard baseline and then
+ * gathers the *one other L4R* into a second baseline of its own — so the row shows how the unit did
+ * against the brand's regular buys and against its own format, which a single custom campaign per
+ * label could not demonstrate.
  */
 export const DEMO_CAMPAIGN_LABELS: CampaignLabel[] = [
   {
@@ -76,9 +78,23 @@ export const DEMO_CAMPAIGN_LABELS: CampaignLabel[] = [
   },
   {
     accountId: "18ce5dem0001",
+    campaignId: entityId("c", "18ce5dem0001:l4r-restock"),
+    kind: "l4r",
+    setBy: DEMO_USER.handle,
+    setAt: "2026-01-06T09:14:30Z",
+  },
+  {
+    accountId: "18ce5dem0001",
     campaignId: entityId("c", "18ce5dem0001:custom-thread"),
     kind: "custom",
     setBy: DEMO_USER.handle,
     setAt: "2026-01-06T09:15:00Z",
+  },
+  {
+    accountId: "18ce5dem0001",
+    campaignId: entityId("c", "18ce5dem0001:custom-poll"),
+    kind: "custom",
+    setBy: DEMO_USER.handle,
+    setAt: "2026-01-06T09:15:30Z",
   },
 ];

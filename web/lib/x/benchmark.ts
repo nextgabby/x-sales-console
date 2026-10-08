@@ -82,6 +82,17 @@ export type BenchmarkMetric = {
   baseline: number;
   /** Signed share of the baseline, or null when the baseline is zero and a ratio says nothing. */
   delta: number | null;
+  /**
+   * The same figure across the brand's *other campaigns of this same label*, when it has any.
+   *
+   * Two baselines because the two questions are both live and have different answers. "Does custom
+   * beat regular" is what gets quoted to an advertiser; "is this L4R any good for an L4R" is what
+   * decides which custom unit to build next, and a unit can beat every standard campaign on the
+   * account while being the worst L4R the brand has run. Null when there is no peer, and pooled
+   * without a quartile band because peer cohorts are small by nature.
+   */
+  peer: number | null;
+  peerDelta: number | null;
   /** The objective's own KPI, which leads the panel and can invert a rates-only verdict. */
   primary: boolean;
   /** Null when too few campaigns carry this metric for a spread to mean anything. */
@@ -129,11 +140,27 @@ export type CustomComparison = {
   heldOut: number;
 };
 
+/**
+ * The brand's other campaigns carrying the *same* label, which get their own baseline.
+ *
+ * Same label rather than merely custom: an L4R is compared against other L4Rs, and a bespoke unit
+ * against other bespoke units. Pooling the two would answer neither question, since the only thing
+ * "custom" has in common across formats is that somebody built it specially.
+ */
+export type PeerComparison = {
+  kind: CampaignLabelKind;
+  campaigns: number;
+  spend: number;
+  names: string[];
+};
+
 export type Benchmark = {
   status: BenchmarkStatus;
   objective: string | null;
   /** Null unless the campaign under review carries a Creative Strategy label. */
   customComparison: CustomComparison | null;
+  /** Null unless that label is shared by at least one of the brand's other campaigns here. */
+  peerComparison: PeerComparison | null;
   /** Which baseline was used. Null unless `status` is "ok". */
   basis: "concurrent" | "historical" | null;
   basisReason: string | null;
@@ -246,6 +273,30 @@ const CPF: MetricSpec = {
   value: (t) => t.cpf,
   available: (t) => t.follows > 0,
 };
+/**
+ * What the custom units are actually sold on, and what cost per engagement cannot show.
+ *
+ * `engagements` counts a link click, a card expand and a like as one each, so a unit built to be
+ * liked and reposted and a unit built to be clicked can report the same cost per engagement while
+ * having bought entirely different things. A like is the whole mechanic of an L4R buy and reposts
+ * are the earned reach a bespoke unit is commissioned for, so both are priced out separately.
+ */
+const CPL: MetricSpec = {
+  key: "costPerLike",
+  label: "Cost per like",
+  format: "currency",
+  lowerIsBetter: true,
+  value: (t) => t.costPerLike,
+  available: (t) => t.likes > 0,
+};
+const CPRP: MetricSpec = {
+  key: "costPerRepost",
+  label: "Cost per repost",
+  format: "currency",
+  lowerIsBetter: true,
+  value: (t) => t.costPerRepost,
+  available: (t) => t.retweets > 0,
+};
 
 /**
  * The metric a campaign should actually be judged on, by objective, followed by supporting rates.
@@ -272,8 +323,19 @@ const OBJECTIVE_METRICS: Record<string, MetricSpec[]> = {
 /** Used when the objective is one we have no specific KPI for. */
 const DEFAULT_METRICS: MetricSpec[] = [CPM, CTR, ENGAGEMENT_RATE, CPE];
 
-function metricsFor(objective: string): MetricSpec[] {
-  return OBJECTIVE_METRICS[objective] ?? DEFAULT_METRICS;
+/**
+ * The metrics for an objective, plus the two the custom units are judged on.
+ *
+ * Appended rather than substituted: the objective's own KPI still leads, because a custom unit on a
+ * clicks objective was still bought for clicks and the panel must not quietly re-rank it. Likes and
+ * reposts go on the end as the extra reading a bespoke unit needs, and `metricsFor` dedupes in case
+ * an objective ever names one of them itself.
+ */
+function metricsFor(objective: string, custom: boolean): MetricSpec[] {
+  const base = OBJECTIVE_METRICS[objective] ?? DEFAULT_METRICS;
+  if (!custom) return base;
+  const keys = new Set(base.map((spec) => spec.key));
+  return [...base, ...[CPL, CPRP].filter((spec) => !keys.has(spec.key))];
 }
 
 /** "October 2025", for dating a baseline that reaches back past the dashboard's window. */
@@ -429,6 +491,8 @@ export function buildBenchmark(options: {
   const ownKind = labels.get(campaign.id) ?? null;
   const custom = isCustomCreative(ownKind) ? ownKind : null;
   const isOtherCustom = (id: string) => custom != null && isCustomCreative(labels.get(id) ?? null);
+  /** Held out of the standard baseline *and* gathered into one of their own. */
+  const isPeer = (id: string) => custom != null && labels.get(id) === custom;
 
   const empty: Benchmark["cohort"] = {
     campaigns: 0,
@@ -440,6 +504,7 @@ export function buildBenchmark(options: {
   const base = {
     objective: campaign.objective,
     customComparison: null,
+    peerComparison: null,
     basis: null,
     basisReason: null,
     windowDays,
@@ -488,6 +553,22 @@ export function buildBenchmark(options: {
   const customComparison: CustomComparison | null = custom ? { kind: custom, heldOut } : null;
 
   /**
+   * The same-label cohort, built from the campaigns the standard baseline just dropped.
+   *
+   * Only the recent period contributes. An older member's whole total sits in a single column, so
+   * restricting it to this campaign's days — which is what makes the two baselines comparable below
+   * — would either zero it or credit months of spend to a handful of days. A peer baseline is a
+   * narrow claim already, and one built from a year-old lump is not worth making.
+   */
+  const peerRows = comparable.filter((row) => isPeer(row.id));
+  const peerSeries = peerRows.map((row) => rawSeries[row.id]!);
+
+  const peerSummary = (spend: number): PeerComparison | null =>
+    custom && peerRows.length > 0
+      ? { kind: custom, campaigns: peerRows.length, spend, names: peerRows.map((row) => row.name) }
+      : null;
+
+  /**
    * Said even when the comparison cannot be built, because "no comparable campaign" and "no
    * comparable *standard* campaign, and here is how many custom ones we set aside" send a rep to
    * two different places.
@@ -495,8 +576,13 @@ export function buildBenchmark(options: {
   const heldOutNote =
     customComparison && heldOut > 0
       ? `${heldOut} other custom campaign${heldOut === 1 ? "" : "s"} on this objective ` +
-        `${heldOut === 1 ? "was" : "were"} held out of the baseline, so this is a comparison ` +
-        `against the brand's standard buys rather than against its custom ones.`
+        `${heldOut === 1 ? "was" : "were"} held out of the main baseline, so the percentages above ` +
+        `are against the brand's standard buys${
+          peerRows.length > 0
+            ? `. The ${peerRows.length === 1 ? "one" : peerRows.length} carrying this same label ` +
+              `${peerRows.length === 1 ? "is" : "are"} compared separately on each row.`
+            : `.`
+        }`
       : null;
 
   const recent: CohortMember[] = cohortRows.map((row) => ({
@@ -523,11 +609,20 @@ export function buildBenchmark(options: {
     }));
 
   if (recent.length === 0 && olderMembers.length === 0) {
+    /**
+     * An advertiser who only runs custom units on an objective lands here: there is no standard
+     * baseline to be the comparison, so no metrics are produced. The peers are still reported, so
+     * the panel can say they exist rather than leaving a rep to conclude the brand has no history
+     * at all. Spend is unrestricted here because there is no concurrent window to restrict it to.
+     */
     return {
       ...base,
       status: "no-cohort",
       campaignDays: ownDays.size,
       customComparison,
+      peerComparison: peerSummary(
+        peerSeries.reduce((total, series) => total + totalsFrom(series).spend, 0),
+      ),
       notes: heldOutNote ? [heldOutNote] : [],
     };
   }
@@ -582,7 +677,24 @@ export function buildBenchmark(options: {
   // Per-campaign totals, which the pooled baseline deliberately throws away and the band needs.
   const perCampaignTotals = cohortSeries.map((series) => totalsFrom(series));
 
-  const metrics = metricsFor(campaign.objective)
+  /**
+   * The peer baseline, restricted to the same days as the standard one whenever that one is.
+   *
+   * Both baselines have to describe the same stretch of time or the two percentages on a row are
+   * not comparable with each other, which is the only reason to show them together.
+   */
+  const peerRestricted = peerSeries.map((series) =>
+    concurrent ? restrictTo(series, ownDays) : series,
+  );
+  const peerTotals = peerRestricted.map((series) => totalsFrom(series));
+  const peerBaseline =
+    peerRestricted.length > 0 ? totalsFrom(combineSeries(peerRestricted, length)) : null;
+
+  const peerComparison = peerSummary(
+    peerTotals.reduce((total, totals) => total + totals.spend, 0),
+  );
+
+  const metrics = metricsFor(campaign.objective, custom != null)
     .filter(
       (spec) =>
         !spec.available || spec.available(campaignTotals) || spec.available(baselineTotals),
@@ -591,6 +703,15 @@ export function buildBenchmark(options: {
       const campaignValue = spec.value(campaignTotals);
       const baselineValue = spec.value(baselineTotals);
       const band = bandFor(spec, perCampaignTotals);
+      /**
+       * Null rather than zero when the peers have no denominator for this metric. A peer cohort
+       * that got no reposts has no cost per repost, and entering it as $0 would report the campaign
+       * as infinitely dearer than a figure that does not exist.
+       */
+      const peerValue =
+        peerBaseline && (!spec.available || spec.available(peerBaseline))
+          ? spec.value(peerBaseline)
+          : null;
       return {
         key: spec.key,
         label: spec.label,
@@ -599,6 +720,9 @@ export function buildBenchmark(options: {
         campaign: campaignValue,
         baseline: baselineValue,
         delta: baselineValue > 0 ? (campaignValue - baselineValue) / baselineValue : null,
+        peer: peerValue,
+        peerDelta:
+          peerValue != null && peerValue > 0 ? (campaignValue - peerValue) / peerValue : null,
         primary: index === 0,
         band,
         position:
@@ -690,6 +814,7 @@ export function buildBenchmark(options: {
     status: "ok",
     objective: campaign.objective,
     customComparison,
+    peerComparison,
     basis,
     basisReason: concurrent
       ? `${selected.length} campaign${selected.length === 1 ? "" : "s"} on this objective ran over the same days`

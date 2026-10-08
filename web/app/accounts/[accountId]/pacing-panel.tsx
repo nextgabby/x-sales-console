@@ -10,8 +10,7 @@ import {
   type CampaignPacing,
   type PacingStatus,
 } from "@/lib/x/pacing";
-import { isBursty } from "@/lib/store/types";
-import type { CampaignLabelKind } from "@/lib/store/types";
+import { CAMPAIGN_LABEL_NAME, isBursty } from "@/lib/store/types";
 import type { CampaignRow, PacingSummary } from "./types";
 
 /** How many rows show before the panel collapses the rest. */
@@ -41,12 +40,6 @@ const STATUS_TONE: Record<PacingStatus, "neutral" | "positive" | "warn" | "negat
   paused: "neutral",
   "no-budget": "neutral",
   unknown: "neutral",
-};
-
-export const LABEL_NAME: Record<CampaignLabelKind, string> = {
-  "trend-genius": "Trend Genius",
-  l4r: "L4R",
-  custom: "Custom",
 };
 
 /** Statuses a rep should act on. Everything else is context, not a task. */
@@ -214,7 +207,7 @@ function PacingRow({ row, currency }: { row: CampaignRow; currency: string | nul
           {isBursty(pacing.label) ? null : (
             <Badge tone={STATUS_TONE[pacing.status]}>{STATUS_LABEL[pacing.status]}</Badge>
           )}
-          {pacing.label ? <Badge tone="accent">{LABEL_NAME[pacing.label]}</Badge> : null}
+          {pacing.label ? <Badge tone="accent">{CAMPAIGN_LABEL_NAME[pacing.label]}</Badge> : null}
         </div>
         <div className="nums shrink-0 text-xs text-muted">
           {pacing.basis === "flight" ? (

@@ -131,8 +131,9 @@ print(len(r)==1 and r[0]['pacing']['label'] is None and d['pacing']['darkDailyBu
 check "a custom creative label does not suppress a real pacing problem" "$(python3 -c "
 import json
 d=json.load(open('/tmp/v-lab1.json'))
-r=[r for r in d['campaigns'] if r['pacing']['label']=='custom'][0]
-print(r['pacing']['status']=='underpacing' and r['pacing']['advice']['lever']=='raise-budget')
+r=[r for r in d['campaigns'] if r['name']=='Launch Thread — Custom Unit'][0]
+print(r['pacing']['label']=='custom' and r['pacing']['status']=='underpacing'
+      and r['pacing']['advice']['lever']=='raise-budget')
 ")"
 # The comparison the custom labels exist for: is a bespoke unit better than the brand's regular buys
 # on the same objective. The assertions pin the part that is easy to break silently — that the cohort
@@ -152,16 +153,46 @@ curl -s "$B/api/accounts/18ce5dem0001/campaigns/$STD/benchmark" > /tmp/v-bm-std.
 check "a custom buy is compared only against standard buys, and says so" "$(python3 -c "
 import json
 b=json.load(open('/tmp/v-bm-l4r.json'))['benchmark']
-labelled={'Drop Alerts — Subscribers', 'Launch Thread — Custom Unit'}
-print(b['customComparison']=={'kind':'l4r','heldOut':1}
+labelled={'Drop Alerts — Subscribers', 'Restock Alerts — Subscribers',
+          'Launch Thread — Custom Unit', 'Poll Unit — Community Pick'}
+print(b['customComparison']=={'kind':'l4r','heldOut':3}
       and not (set(b['cohort']['names']) & labelled)
-      and any('held out of the baseline' in note for note in b['notes']))
+      and any('held out of the main baseline' in note for note in b['notes']))
 ")"
 check "and beats them on the objective's own KPI" "$(python3 -c "
 import json
 b=json.load(open('/tmp/v-bm-l4r.json'))['benchmark']
 kpi=[m for m in b['metrics'] if m['primary']][0]
 print(kpi['key']=='cpe' and kpi['campaign'] < kpi['baseline'] and kpi['position']=='below')
+")"
+# The second baseline, and the case that makes it worth having: this campaign beats every standard
+# buy on the account and is still the weaker of the advertiser's two L4Rs. One number gets quoted to
+# the client, the other decides which unit to build next, and neither is a correction of the other.
+check "the same label gets its own baseline, built only from that label" "$(python3 -c "
+import json
+b=json.load(open('/tmp/v-bm-l4r.json'))['benchmark']
+p=b['peerComparison']
+print(p['kind']=='l4r' and p['campaigns']==1 and p['names']==['Restock Alerts — Subscribers'])
+")"
+check "and the two comparisons can disagree without either being dropped" "$(python3 -c "
+import json
+b=json.load(open('/tmp/v-bm-l4r.json'))['benchmark']
+kpi=[m for m in b['metrics'] if m['primary']][0]
+print(kpi['delta'] < 0 and kpi['peerDelta'] > 0)
+")"
+check "likes and reposts are priced for a custom buy" "$(python3 -c "
+import json
+b=json.load(open('/tmp/v-bm-l4r.json'))['benchmark']
+keys=[m['key'] for m in b['metrics']]
+rows=[m for m in b['metrics'] if m['key'] in ('costPerLike','costPerRepost')]
+print(keys[:1]==['cpe'] and len(rows)==2
+      and all(m['campaign']>0 and m['baseline']>0 and m['peer'] is not None for m in rows))
+")"
+check "and left off a standard buy, which is not sold on them" "$(python3 -c "
+import json
+b=json.load(open('/tmp/v-bm-std.json'))['benchmark']
+keys={m['key'] for m in b['metrics']}
+print(b['peerComparison'] is None and 'costPerLike' not in keys and 'costPerRepost' not in keys)
 ")"
 # The narrowing is one-directional on purpose: a standard campaign's baseline is still everything
 # the brand ran on the objective, which is what it was before labels existed.

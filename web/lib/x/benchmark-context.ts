@@ -24,6 +24,8 @@ Rules you must follow:
 - Where the comparison covers only the days this campaign ran, that is a like-for-like read. Where it covers the full window, say that auction conditions differ across it.
 - Where the campaign is marked as a CUSTOM CREATIVE BUY, the baseline has deliberately been narrowed to the advertiser's STANDARD campaigns on this objective, and that is the comparison to make: does the custom unit beat the brand's regular buys. Say so explicitly. Do NOT describe the held-out custom campaigns, speculate about how they performed, or treat their absence as a flaw in the baseline. You know nothing about them beyond how many there were.
 - Never explain a custom unit's result by what the unit is. You are told that it is custom and, where given, which format; you are told nothing about how it looks or behaves, so any claim that a result follows from the format is invention.
+- A custom campaign may carry a SECOND comparison, against the advertiser's other campaigns of the same label. These are two different questions with possibly opposite answers, and you must keep them apart: beating the standard buys is what gets quoted to an advertiser, while losing to the same-label buys says this particular execution is the weaker one. Where they disagree, give both and say which is which. Never average them or treat either as a correction of the other.
+- Peer figures come with no range, because those cohorts are small. Say how many campaigns are behind a peer comparison whenever you lean on it, and treat a single-campaign peer cohort as one campaign's result rather than a norm.
 - This tool is read-only. Frame suggestions as talking points, not as changes you are making.
 - Be direct and specific. No preamble, no restating the question, no filler like "based on the data provided".
 
@@ -67,6 +69,15 @@ export function buildBenchmarkPrompt(options: {
         ? `Baseline: ${benchmark.cohort.campaigns} of this advertiser's other campaigns on the same objective, reaching back to ${benchmark.lookback.fromDate} because the last ${benchmark.windowDays} days held too few. ${benchmark.lookback.campaigns} of them ran before that window, so this is the brand's track record over the past year rather than its current rate.`
         : `Baseline: ${benchmark.cohort.campaigns} of this advertiser's other campaigns on the same objective across ${benchmark.windowDays} days, which spans different auction conditions than this campaign ran in.`,
     `Baseline spend: ${formatCurrency(benchmark.cohort.spend, currency)}`,
+    ...(benchmark.peerComparison
+      ? [
+          `Second baseline: ${benchmark.peerComparison.campaigns} other campaign${
+            benchmark.peerComparison.campaigns === 1 ? "" : "s"
+          } carrying the same ${
+            benchmark.peerComparison.kind === "l4r" ? "L4R" : "custom"
+          } label, ${formatCurrency(benchmark.peerComparison.spend, currency)} of spend. Each metric below carries a figure against these as well, and the two comparisons are separate findings.`,
+        ]
+      : []),
     "",
     "Metrics, comparison already computed:",
   ];
@@ -92,11 +103,32 @@ export function buildBenchmarkPrompt(options: {
         }`
       : "";
 
+    /**
+     * The peer figure is given its own clause with its own BETTER/WORSE verdict, because the two
+     * can genuinely point opposite ways and the model must not resolve that by picking one. A unit
+     * can be the brand's cheapest engagement buy and still be the worst of its own format.
+     */
+    const peer =
+      benchmark.peerComparison && metric.peer != null
+        ? `; against the ${benchmark.peerComparison.campaigns} other ${
+            benchmark.peerComparison.kind === "l4r" ? "L4R" : "custom"
+          } campaign${benchmark.peerComparison.campaigns === 1 ? "" : "s"} it is ${show(
+            metric.peer,
+            metric.format,
+          )}${
+            metric.peerDelta == null
+              ? ""
+              : ` (${metric.peerDelta > 0 ? "+" : ""}${Math.round(metric.peerDelta * 100)}% — ${
+                  metric.peerDelta < 0 === metric.lowerIsBetter ? "BETTER" : "WORSE"
+                } than the same-label buys)`
+          }`
+        : "";
+
     lines.push(
       `- ${metric.label}${metric.primary ? " [OBJECTIVE KPI]" : ""}: this campaign ${show(
         metric.campaign,
         metric.format,
-      )}, brand normally ${show(metric.baseline, metric.format)} (${verdict})${range}`,
+      )}, brand normally ${show(metric.baseline, metric.format)} (${verdict})${range}${peer}`,
     );
   }
 

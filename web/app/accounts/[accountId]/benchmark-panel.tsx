@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AskGrok } from "@/components/ask-grok";
 import { Badge, Callout, cx, Skeleton } from "@/components/ui";
 import { formatCurrency, formatNumber, formatPercent, formatUnitCost, titleCase } from "@/lib/format";
+import { CAMPAIGN_LABEL_NAME } from "@/lib/store/types";
 import type { Benchmark, BenchmarkMetric } from "@/lib/x/benchmark";
 
 const BENCHMARK_SUGGESTIONS = [
@@ -133,7 +134,13 @@ function Body({
             */}
             {b.customComparison ? (
               <Badge tone="accent">
-                {b.customComparison.kind === "l4r" ? "L4R" : "Custom"} vs standard
+                {CAMPAIGN_LABEL_NAME[b.customComparison.kind]} vs standard
+              </Badge>
+            ) : null}
+            {b.peerComparison ? (
+              <Badge tone="neutral">
+                  + {b.peerComparison.campaigns} other{" "}
+                {CAMPAIGN_LABEL_NAME[b.peerComparison.kind]}
               </Badge>
             ) : null}
           </div>
@@ -145,7 +152,18 @@ function Body({
 
         <div className="divide-y divide-border">
           {b.metrics.map((metric) => (
-            <MetricRow key={metric.key} metric={metric} currency={currency} />
+            <MetricRow
+              key={metric.key}
+              metric={metric}
+              currency={currency}
+              peerLabel={
+                b.peerComparison
+                  ? `${b.peerComparison.campaigns === 1 ? "the other" : "other"} ${
+                      CAMPAIGN_LABEL_NAME[b.peerComparison.kind]
+                    } ${b.peerComparison.campaigns === 1 ? "buy" : "buys"}`
+                  : null
+              }
+            />
           ))}
         </div>
 
@@ -188,9 +206,12 @@ function Body({
 function MetricRow({
   metric,
   currency,
+  peerLabel,
 }: {
   metric: BenchmarkMetric;
   currency: string | null;
+  /** How to name the second baseline, e.g. "the other L4R buy". Null when there is no peer cohort. */
+  peerLabel: string | null;
 }) {
   const show = (value: number) =>
     metric.format === "currency"
@@ -199,6 +220,8 @@ function MetricRow({
 
   // A negative delta is good for a cost and bad for a rate, so the sign alone cannot pick a colour.
   const better = metric.delta == null ? null : metric.delta < 0 === metric.lowerIsBetter;
+  const betterThanPeers =
+    metric.peerDelta == null ? null : metric.peerDelta < 0 === metric.lowerIsBetter;
 
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-3">
@@ -239,6 +262,29 @@ function MetricRow({
             <>brand normally {show(metric.baseline)}</>
           )}
         </p>
+        {/*
+          The second baseline, on its own line rather than folded into the one above. Both answer
+          "compared to what", and running them together reads as a single range when they are two
+          different cohorts — the sentence a rep would quote has to make clear which of the two it
+          came from.
+        */}
+        {peerLabel && metric.peer != null ? (
+          <p className="mt-0.5 text-[11px] text-muted">
+            vs {peerLabel} <span className="nums text-ink">{show(metric.peer)}</span>
+            {metric.peerDelta != null ? (
+              <span
+                className={cx(
+                  "font-semibold",
+                  betterThanPeers ? "text-positive" : "text-negative",
+                )}
+              >
+                {" "}
+                · {metric.peerDelta > 0 ? "+" : ""}
+                {Math.round(metric.peerDelta * 100)}%
+              </span>
+            ) : null}
+          </p>
+        ) : null}
       </div>
 
       <div className="nums flex shrink-0 items-center gap-3 text-right">

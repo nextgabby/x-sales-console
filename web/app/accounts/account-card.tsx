@@ -18,8 +18,8 @@ type AccountSummary = {
   spendSparkline: number[];
   spend7d: number;
   accessible: boolean;
-  /** `denied` means X refused it, which is the only case re-adding fixes. */
-  accessState: "ok" | "denied" | "unavailable";
+  /** `denied` means the grant is gone, which is the only case re-adding fixes. */
+  accessState: "ok" | "denied" | "role" | "unavailable";
   warnings: string[];
 };
 
@@ -99,6 +99,20 @@ export function AccountCard({
               {account.access === "spy"
                 ? "Re-open it in the spy list, then add it again. It stays here until you remove it."
                 : "Ask the advertiser to restore your access."}
+            </div>
+          ) : data.accessState === "role" ? (
+            /*
+             * The same 403, a different cause and the opposite advice. X still reports a role on
+             * this account, so the grant is intact and re-adding it would change nothing — the role
+             * is not high enough to read analytics. The roles held are named because that is what
+             * the rep has to quote when asking for more, and because it lets them check this
+             * reading rather than take it on faith.
+             */
+            <div className="text-xs leading-relaxed text-warn">
+              <span className="font-semibold">Your role here cannot read analytics.</span> You have{" "}
+              {data.permissions.map((role) => titleCase(role)).join(", ")} on this account, which
+              does not include campaign reporting. Re-adding it will not help — ask the advertiser
+              to raise your role.
             </div>
           ) : (
             /* Not a permissions refusal, so re-adding the account would achieve nothing. */

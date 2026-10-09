@@ -11,6 +11,7 @@ import {
   titleCase,
 } from "@/lib/format";
 import { CAMPAIGN_LABEL_NAME, isBursty } from "@/lib/store/types";
+import { isQuiet } from "./types";
 import type { CampaignRow } from "./types";
 
 type Column = {
@@ -103,11 +104,11 @@ export function CampaignTable({
   const [ascending, setAscending] = useState(false);
   const [showDormant, setShowDormant] = useState(false);
 
-  const dormantCount = campaigns.filter((row) => row.dormant).length;
+  const dormantCount = campaigns.filter(isQuiet).length;
 
   const rows = useMemo(() => {
     const column = COLUMNS.find((entry) => entry.key === sortKey);
-    const visible = showDormant ? campaigns : campaigns.filter((row) => !row.dormant);
+    const visible = showDormant ? campaigns : campaigns.filter((row) => !isQuiet(row));
     if (!column) return visible;
     return [...visible].sort((a, b) => {
       const left = column.value(a);

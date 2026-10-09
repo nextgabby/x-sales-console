@@ -38,6 +38,22 @@ export type CampaignRow = {
   takeover: boolean;
 };
 
+/**
+ * Whether a campaign is quiet enough to keep out of the lists by default.
+ *
+ * "No activity in this range" is the usual reason to hide a row, but a label overrides it. The
+ * filter exists to clear out campaigns nobody has an opinion about, and a label is an opinion — for
+ * a bursty buy in particular, no delivery *is* the reading, so collapsing it behind a toggle hides
+ * the exact fact the label was put there to explain. A rep who marked a campaign and then could not
+ * find it would reasonably conclude the tool had lost it.
+ *
+ * Shared by the campaign table and the pacing panel because the two must agree on which campaigns
+ * the account is running; disagreeing puts two lists on one screen contradicting each other.
+ */
+export function isQuiet(row: CampaignRow): boolean {
+  return row.dormant && row.pacing.label == null;
+}
+
 export type FundingInstrumentRow = {
   id: string;
   description: string | null;

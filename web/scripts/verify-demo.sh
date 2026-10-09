@@ -119,6 +119,17 @@ d=json.load(open('/tmp/v-lab2.json'))
 r=[r for r in d['campaigns'] if r['pacing']['label']=='trend-genius'][0]
 print(r['pacing']['status'] not in ('dark','idle') and d['pacing']['dark']==0)
 ")"
+# A bursty buy goes quiet by design, so on a short range it has no activity and would fall into the
+# "no activity" bucket both lists hide by default — burying the one fact the label exists to explain.
+# The exemption is a client rule, so what is pinned here is that the case it handles is real: the
+# demo genuinely produces a campaign that is both labelled and dormant on the default range.
+curl -s "$B/api/accounts/18ce5dem0002/dashboard?days=7" > /tmp/v-lab2-7d.json
+check "a labelled trend buy can be dormant on the default range" "$(python3 -c "
+import json
+d=json.load(open('/tmp/v-lab2-7d.json'))
+r=[r for r in d['campaigns'] if r['pacing']['label']=='trend-genius']
+print(len(r)==1 and r[0]['dormant'] is True)
+")"
 check "the same shape unlabelled still reports stopped" "$(python3 -c "
 import json
 d=json.load(open('/tmp/v-lab1.json'))

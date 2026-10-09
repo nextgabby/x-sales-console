@@ -117,11 +117,16 @@ Roles are granted at **business.x.com** — Account administrator, Ad manager, C
 Organic analyst, Creative Manager — and `Campaign analyst` is sufficient for read-only analytics.
 
 The console fetches each account's role from `authenticated_user_access`, which is the documented way
-to determine it, and carries the `permissions` array through to the account payload. Nothing displays
-it yet: whether an account opens is decided by probing the campaigns call, which is what actually
-403s on a lapsed grant or an insufficient role. That works, but it cannot distinguish "your grant
-expired" from "your role is too low" — so showing the role would be a genuine improvement, and the
-data is already there to do it.
+to determine it. Whether an account opens is decided by probing the campaigns call, since that is
+what actually 403s — but the same 403 means either "your grant expired" or "your role is too low",
+and those get opposite advice. `accessStateFor()` separates them on the one signal that differs:
+whether X names a role at all. A lapsed grant reports none, observed on a real account that returns
+`[]` where a working one returns `["ACCOUNT_ADMIN"]`. A role X can still name means the grant is
+intact, so the refusal is about the role, and the card says so and lists the roles held rather than
+sending the rep off to re-add an account that was never the problem.
+
+It deliberately does not check *which* roles can read analytics. The useful fact is that a role
+exists at all, and that holds without keeping a list of X's role names current.
 
 Adding an advertiser by handle is the pattern X documents as *obtaining your developer access token*:
 the advertiser grants the rep's @username access to their ad account, and the rep's own OAuth token
@@ -437,6 +442,12 @@ On the campaign's own row in **Campaigns**, beside its status, and on its row in
 whichever list a rep happens to be reading, the same row explains itself. The label control lives in
 the drawer, but somebody scanning the table should not have to open a campaign to find out that the
 flat stretch in its sparkline is how the buy works.
+
+A labelled campaign is also exempt from the "no activity" filter, in both lists, via the shared
+`isQuiet()`. That filter hides campaigns with no delivery in the range, which is almost always right
+— but a bursty buy goes quiet by design, so on a 7-day range it is exactly the campaign that gets
+hidden, and "it has not fired in a week" is the whole reading. A rep who labelled a campaign and then
+could not find it would reasonably conclude the tool had lost it.
 
 The two lists make the same suppression decision for a bursty label: no pace badge, the label in its
 place. The status itself still exists on the row data — the shortfall arithmetic is real and still

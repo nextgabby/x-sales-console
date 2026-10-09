@@ -11,6 +11,7 @@ import {
   type PacingStatus,
 } from "@/lib/x/pacing";
 import { CAMPAIGN_LABEL_NAME, isBursty } from "@/lib/store/types";
+import { isQuiet } from "./types";
 import type { CampaignRow, PacingSummary } from "./types";
 
 /** How many rows show before the panel collapses the rest. */
@@ -76,10 +77,11 @@ export function PacingPanel({
     /**
      * Campaigns with no activity in the range sit behind a toggle in the campaign table, so
      * listing them here puts two panels on the same screen disagreeing about which campaigns the
-     * account is running. The exception is one that is live and funded yet delivering nothing,
-     * which is the entire point of this panel and has no activity by definition.
+     * account is running — hence the shared `isQuiet`. The exception is one that is live and funded
+     * yet delivering nothing, which is the entire point of this panel and has no activity by
+     * definition.
      */
-    .filter((row) => !row.dormant || ACTIONABLE.has(row.pacing.status))
+    .filter((row) => !isQuiet(row) || ACTIONABLE.has(row.pacing.status))
     .map((row) => ({ row, score: severity(row.pacing) }))
     .sort((a, b) => b.score.tier - a.score.tier || b.score.stake - a.score.stake)
     .map(({ row }) => row);

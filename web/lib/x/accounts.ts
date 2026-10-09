@@ -117,18 +117,45 @@ export type AccountSummary = {
    * "expired access" from "partial data" and lets the UI say so plainly.
    */
   accessible: boolean;
-  /**
-   * Why the account could not be read, when it could not be.
-   *
-   * `denied` is X refusing it — a lapsed spy grant or a revoked role — and is the only case where
-   * re-adding the account is the fix. `unavailable` is everything else: a rate limit, a 500, a
-   * dropped connection. Separated because the advice differs and guessing wrong wastes the rep's
-   * time on an account that was fine.
-   */
-  accessState: "ok" | "denied" | "unavailable";
+  /** Why the account could not be read, when it could not be. See `accessStateFor`. */
+  accessState: AccessState;
   /** Set when enrichment partly failed, so the card can show what is missing. */
   warnings: string[];
 };
+
+export type AccessState = "ok" | "denied" | "role" | "unavailable";
+
+/**
+ * Why an account could not be read, from the two things X tells us about it.
+ *
+ * `denied` is a refusal of the account outright — a lapsed spy grant — and is the only case where
+ * re-adding it is the fix. `role` is also a refusal, but of the analytics call specifically: the
+ * grant is alive and the rep's role is too low to read reporting, which re-adding cannot change.
+ * `unavailable` is everything else: a rate limit, a 500, a dropped connection.
+ *
+ * The campaigns call 403s identically whether the grant lapsed or the role is too low, so the two
+ * are told apart by whether X names a role at all. A lapsed grant reports none: a real lapsed
+ * account returns `[]` where a working one returns `["ACCOUNT_ADMIN"]`. This deliberately does not
+ * check *which* roles can read analytics — the useful fact is that X still knows of a role here, so
+ * the grant is intact, and that holds without a list of role names to keep current.
+ *
+ * Worth separating because the advice is not merely different but contradictory. Telling a rep
+ * whose grant is fine to go and re-add the account wastes their time and teaches them that the
+ * message means nothing.
+ */
+export function accessStateFor({
+  accessible,
+  campaignsDenied,
+  permissions,
+}: {
+  accessible: boolean;
+  campaignsDenied: boolean;
+  permissions: string[];
+}): AccessState {
+  if (accessible) return "ok";
+  if (!campaignsDenied) return "unavailable";
+  return permissions.length > 0 ? "role" : "denied";
+}
 
 type AuthenticatedUserAccess = { permissions?: string[] };
 
@@ -455,11 +482,8 @@ export async function buildAccountSummary(
   const advertiserUserId = promotableUsers?.[0]?.user_id ?? null;
   // Campaigns is the canonical access probe: it is the call that 403s on a lapsed spy grant.
   const accessible = campaigns !== null;
-  const accessState: AccountSummary["accessState"] = accessible
-    ? "ok"
-    : campaignsDenied
-      ? "denied"
-      : "unavailable";
+  const permissions = access?.data?.permissions ?? [];
+  const accessState = accessStateFor({ accessible, campaignsDenied, permissions });
   // Deleted campaigns are fetched only to classify spend, so they stay out of the counts.
   const live = (campaigns ?? []).filter((campaign) => !campaign.deleted);
 
@@ -478,7 +502,7 @@ export async function buildAccountSummary(
       ? await resolveHandle(credentials, advertiserUserId)
       : null,
     advertiserUserId,
-    permissions: access?.data?.permissions ?? [],
+    permissions,
     currency: primaryFunding?.currency ?? null,
     fundingInstruments: (fundingInstruments ?? []).map((instrument) => ({
       id: instrument.id,

@@ -155,7 +155,8 @@ export function CompareView({ accountId }: { accountId: string }) {
                     className="size-2 shrink-0 rounded-full"
                     style={{ background: SERIES_COLORS[index % SERIES_COLORS.length] }}
                   />
-                  <span className="truncate text-xs text-ink" title={campaign.name}>
+                  {/* `min-w-0` or the chip overflows its own max-width instead of ellipsising. */}
+                  <span className="min-w-0 truncate text-xs text-ink" title={campaign.name}>
                     {campaign.name}
                   </span>
                   {selected.length > 2 ? (

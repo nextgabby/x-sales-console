@@ -34,14 +34,27 @@ export function CompareTable({
       </header>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table
+          className="w-full table-fixed text-sm"
+          /*
+           * Fixed layout, so the campaign columns divide the width evenly and a long name cannot
+           * widen its own column. Under the browser's automatic layout one campaign called
+           * "Autumn Flash Sale — Website Clicks" stretched the table past the viewport and put the
+           * whole comparison behind a horizontal scroll, which defeats the point of a side by side.
+           *
+           * The floor is on the table rather than the cells because table layout ignores per-cell
+           * min-widths. It only bites when several campaigns are compared at once, which is the
+           * one case where scrolling is the honest answer.
+           */
+          style={{ minWidth: `${11 + campaigns.length * 8}rem` }}
+        >
           <thead>
             <tr className="border-b border-border">
               <th className="w-44 px-5 py-3 text-left text-[11px] font-medium tracking-wide text-muted uppercase">
                 Metric
               </th>
               {campaigns.map((campaign, index) => (
-                <th key={campaign.id} className="min-w-[11rem] px-4 py-3 text-right align-bottom">
+                <th key={campaign.id} className="px-4 py-3 text-right align-bottom">
                   <button
                     onClick={() => onBaselineChange(campaign.id)}
                     className="group/head block w-full text-right"
@@ -54,7 +67,21 @@ export function CompareTable({
                           background: SERIES_COLORS[index % SERIES_COLORS.length],
                         }}
                       />
-                      <span className="truncate text-xs font-semibold text-ink group-hover/head:text-accent">
+                      {/*
+                        Wrapped rather than ellipsised. What distinguishes these names is usually
+                        the end of them — "— Clicks", "— Custom Unit", "— Video" — so an ellipsis
+                        cuts off the only part a rep is reading the column to tell apart. Three
+                        lines because two was not enough: at seven campaigns the columns are about
+                        150px and "Coastal Campaign — Video" lost its "Video".
+
+                        `min-w-0` is what lets it shrink at all. A flex child defaults to its own
+                        content width, which is why the `truncate` that used to be here never
+                        engaged — the column grew instead, and the table scrolled sideways.
+                      */}
+                      <span
+                        className="line-clamp-3 min-w-0 text-xs font-semibold break-words text-ink group-hover/head:text-accent"
+                        title={campaign.name}
+                      >
                         {campaign.name}
                       </span>
                     </span>

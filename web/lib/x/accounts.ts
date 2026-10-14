@@ -64,6 +64,8 @@ export type Campaign = {
   end_time?: string | null;
   daily_budget_amount_local_micro?: number | null;
   total_budget_amount_local_micro?: number | null;
+  /** Null is "no cap", which is what the setup checklist wants. See `lib/x/setup-check.ts`. */
+  frequency_cap?: number | null;
 };
 
 /** How the rep reaches an account: directly granted, or through impersonation. */

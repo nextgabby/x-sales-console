@@ -17,6 +17,7 @@ import { AudiencePanel } from "./audience-panel";
 import { InsightsPanel } from "./insights-panel";
 import { LabelControl } from "./label-control";
 import { PlatformPanel } from "./platform-panel";
+import { SetupPanel } from "./setup-panel";
 import { TargetingPanel } from "./targeting-panel";
 import type { CampaignLabelKind } from "@/lib/store/types";
 import type { CampaignDetailPayload } from "./types";
@@ -42,6 +43,7 @@ export function CampaignDrawer({
   days,
   timezone,
   label,
+  objectiveSiblings,
   onClose,
 }: {
   accountId: string;
@@ -55,14 +57,19 @@ export function CampaignDrawer({
    * would be a second source of truth for one enum.
    */
   label: CampaignLabelKind | null;
+  /** Campaigns on the same objective, for the setup checklist. See the dashboard's own comment. */
+  objectiveSiblings: number | null;
   onClose: () => void;
 }) {
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["campaign", accountId, campaignId, asUser ?? "direct", days],
+    queryKey: ["campaign", accountId, campaignId, asUser ?? "direct", days, objectiveSiblings],
     staleTime: 5 * 60_000,
     queryFn: async () => {
       const params = new URLSearchParams({ days: String(days), timezone });
       if (asUser) params.set("asUser", asUser);
+      if (objectiveSiblings != null) {
+        params.set("objectiveSiblings", String(objectiveSiblings));
+      }
       const response = await fetch(
         `/api/accounts/${accountId}/campaigns/${campaignId}?${params.toString()}`,
         { cache: "no-store" },
@@ -234,6 +241,21 @@ export function CampaignDrawer({
                 days={days}
                 timezone={timezone}
                 currency={data.currency}
+              />
+
+              {/*
+                Directly above targeting, which is one of the things it checks. The checklist is the
+                summary — "these three settings are off playbook" — and targeting below it is the
+                detail, so a rep who wants to see the criteria behind a finding scrolls down rather
+                than opening something else.
+              */}
+              <SetupPanel
+                setup={data.setup}
+                accountId={accountId}
+                campaignId={campaignId}
+                campaignName={data.campaign.name}
+                asUser={asUser}
+                days={days}
               />
 
               {/*

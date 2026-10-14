@@ -91,6 +91,35 @@ function campaignObject(campaign: DemoCampaign, timeZone: string) {
  * Budgets and flight dates live on line items in the real API — every campaign-level budget field
  * comes back null — so the demo mirrors that, or the pacing panel would have nothing to read.
  */
+/**
+ * The UTC instant at which a given wall-clock hour occurs on a given local date.
+ *
+ * Two steps, because an offset depends on the instant it is measured at: assume the wall time is
+ * UTC, ask the zone what that instant looks like locally, and shift by the difference. Within an
+ * hour of a DST transition this can land an hour out, which no fixture here is near.
+ */
+function zonedInstant(date: string, hour: number, timeZone: string): string {
+  const assumed = new Date(`${date}T${String(hour).padStart(2, "0")}:00:00Z`);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(assumed);
+  const part = (type: string) => Number(parts.find((entry) => entry.type === type)?.value ?? 0);
+  const seenLocally = Date.UTC(
+    part("year"),
+    part("month") - 1,
+    part("day"),
+    part("hour") % 24,
+    part("minute"),
+  );
+  return new Date(assumed.getTime() * 2 - seenLocally).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 function lineItemObjects(campaign: DemoCampaign, timeZone: string) {
   const { start, end } = flightDates(campaign, timeZone);
   return campaign.lineItems.map((item) => ({
@@ -103,7 +132,27 @@ function lineItemObjects(campaign: DemoCampaign, timeZone: string) {
     bid_amount_local_micro: item.bidMicro,
     goal: null,
     deleted: item.deleted,
-    start_time: `${start}T00:00:00Z`,
+    /**
+     * The setup checklist reads these. They are per campaign rather than per line item because
+     * every real account seen so far configures a campaign's ad groups the same way, and a demo
+     * where one ad group of four is misconfigured would teach a rep to distrust the summary.
+     */
+    audience_expansion: campaign.setup.audienceExpansion,
+    bid_strategy: campaign.setup.bidStrategy,
+    pay_by: campaign.setup.payBy,
+    placements: campaign.setup.placements,
+    standard_delivery: campaign.setup.standardDelivery,
+    frequency_cap: campaign.setup.frequencyCap,
+    target_cpa_local_micro: null,
+    primary_web_event_tag: null,
+    /** Mirrors the real API, which reports the last edit; the checklist reads it for learning-period changes. */
+    updated_at: `${start}T00:00:00Z`,
+    /**
+     * A real instant for the configured local hour, not `T00:00:00Z`. Midnight UTC is 8pm the
+     * previous evening in New York, so hardcoding it would have every demo campaign reporting that
+     * it starts mid-day — the checklist asks about midnight in the *account's* day.
+     */
+    start_time: zonedInstant(start, campaign.setup.startHour, timeZone),
     end_time: end ? `${end}T00:00:00Z` : null,
     daily_budget_amount_local_micro:
       campaign.dailyBudget == null

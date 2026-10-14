@@ -12,9 +12,22 @@ import { CampaignTable } from "./campaign-table";
 import { KpiTiles } from "./kpi-tiles";
 import { PacingPanel } from "./pacing-panel";
 import { TrendChart, type TrendMetric } from "./trend-chart";
-import type { DashboardPayload } from "./types";
+import type { CampaignRow, DashboardPayload } from "./types";
 
 const RANGES = [7, 14, 30, 90];
+
+/**
+ * The account's other campaigns on the same objective, for the setup checklist. Null when the
+ * campaign's own objective is unknown, since "every campaign with no objective" is not a cohort.
+ * Takeovers are excluded: the API does not describe them, so they have no objective to share.
+ */
+function objectiveSiblings(campaigns: CampaignRow[], campaignId: string): number | null {
+  const own = campaigns.find((row) => row.id === campaignId);
+  if (!own?.objective) return null;
+  return campaigns.filter(
+    (row) => row.id !== campaignId && !row.takeover && row.objective === own.objective,
+  ).length;
+}
 
 export function DashboardView({ accountId }: { accountId: string }) {
   const router = useRouter();
@@ -297,6 +310,12 @@ export function DashboardView({ accountId }: { accountId: string }) {
           label={
             data.campaigns.find((row) => row.id === openCampaign)?.pacing.label ?? null
           }
+          /**
+           * Counted here because this is the only cheap place to count it: objective lives on the
+           * line item, so the server would have to fetch every line item on the account to answer
+           * the checklist's "1 campaign per objective" line, while this list already holds it.
+           */
+          objectiveSiblings={objectiveSiblings(data.campaigns, openCampaign)}
           onClose={() => setOpenCampaign(null)}
         />
       ) : null}

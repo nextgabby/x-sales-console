@@ -8,6 +8,12 @@ import { currentSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
+function positiveInt(raw: string | null): number | null {
+  if (raw == null) return null;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ accountId: string; campaignId: string }> },
@@ -31,6 +37,12 @@ export async function GET(
       days: normalizeDays(url.searchParams.get("days")),
       timezone: url.searchParams.get("timezone") || "UTC",
       actor: session.actor,
+      /**
+       * Supplied by the dashboard, which already knows every campaign's objective; see the option's
+       * own comment for why this is not counted server side. A bad value changes one checklist
+       * line's wording and nothing else, so it is clamped rather than validated.
+       */
+      objectiveSiblings: positiveInt(url.searchParams.get("objectiveSiblings")),
     });
 
     return NextResponse.json(payload);

@@ -9,6 +9,7 @@ import {
   totalsFrom,
   type MetricSeries,
 } from "./stats";
+import { buildSetupCheck } from "./setup-check";
 import { buildTargeting } from "./targeting";
 import { buildRange, microsToCurrency } from "./time";
 import type { XCredentials } from "../store";
@@ -37,6 +38,22 @@ type LineItem = {
   bid_amount_local_micro?: number | null;
   goal?: string | null;
   deleted?: boolean;
+  updated_at?: string | null;
+  /**
+   * Setup settings, read by `lib/x/setup-check.ts` rather than displayed. All of these are returned
+   * by `GET line_items` already — the type simply did not name them — so the checklist costs no
+   * extra request. Verified against a live account; see `scripts/probe-setup-fields.mjs`.
+   */
+  audience_expansion?: string | null;
+  bid_strategy?: string | null;
+  pay_by?: string | null;
+  placements?: string[] | null;
+  standard_delivery?: boolean | null;
+  frequency_cap?: number | null;
+  target_cpa_local_micro?: number | null;
+  primary_web_event_tag?: string | null;
+  daily_budget_amount_local_micro?: number | null;
+  start_time?: string | null;
 };
 
 type PromotedTweet = {
@@ -84,6 +101,13 @@ export async function buildCampaignDetail(options: {
   actor: Actor;
   /** Previews are iframes for the browser to mount; the AI path has no use for them. */
   includePreviews?: boolean;
+  /**
+   * Campaigns on the same objective that delivered in this range, excluding this one. The
+   * checklist's "1 campaign per objective" line needs it, and only the caller can answer cheaply:
+   * objective lives on the line item, so counting it here would mean fetching every line item on
+   * the account. Left undefined, that one line reports unchecked.
+   */
+  objectiveSiblings?: number | null;
 }): Promise<CampaignDetailPayload> {
   const {
     credentials,
@@ -93,6 +117,7 @@ export async function buildCampaignDetail(options: {
     days,
     timezone,
     actor,
+    objectiveSiblings = null,
     includePreviews = true,
   } = options;
 
@@ -316,6 +341,47 @@ export async function buildCampaignDetail(options: {
     lineItems: rows,
     promotedPosts: posts,
     targeting,
+    /**
+     * Built from data already in hand — the campaign, its live line items, its targeting and its
+     * creative copy — so the checklist costs no extra request. Deleted line items are excluded for
+     * the same reason targeting excludes them: what a dead ad group used to be set to is not this
+     * campaign's setup.
+     */
+    setup: buildSetupCheck({
+      objective: lineItems.find((item) => item.objective)?.objective ?? null,
+      campaignFrequencyCap: campaign.frequency_cap ?? null,
+      campaignDailyBudget:
+        campaign.daily_budget_amount_local_micro != null
+          ? microsToCurrency(campaign.daily_budget_amount_local_micro)
+          : null,
+      lineItems: lineItems
+        .filter((item) => !item.deleted)
+        .map((item) => ({
+          id: item.id,
+          name: item.name ?? null,
+          audienceExpansion: item.audience_expansion ?? null,
+          bidStrategy: item.bid_strategy ?? null,
+          payBy: item.pay_by ?? null,
+          placements: item.placements ?? [],
+          standardDelivery: item.standard_delivery ?? null,
+          frequencyCap: item.frequency_cap ?? null,
+          targetCpa:
+            item.target_cpa_local_micro != null
+              ? microsToCurrency(item.target_cpa_local_micro)
+              : null,
+          webEventTag: item.primary_web_event_tag ?? null,
+          dailyBudget:
+            item.daily_budget_amount_local_micro != null
+              ? microsToCurrency(item.daily_budget_amount_local_micro)
+              : null,
+          startTime: item.start_time ?? null,
+          updatedAt: item.updated_at ?? null,
+        })),
+      targeting,
+      copy: posts.map((post) => post.text).filter((text): text is string => Boolean(text)),
+      objectiveSiblings,
+      timeZone: timezone,
+    }),
     warnings,
   };
 }

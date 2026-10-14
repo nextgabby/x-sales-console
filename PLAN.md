@@ -640,6 +640,54 @@ Verified live: on Novig it recommended nothing and said the exclusions were deli
 of Duty pipeline test it led with the eight dead inclusion lists and suggested **restoring** the dead
 exclusion rather than dropping it.
 
+## 5g. How it was built — the setup checklist
+
+Asked for as "a ask grok about this campaign specifically for optimization, like does it align with
+these best practices for campaign set up", against three internal documents: the Campaign Success
+Checklist Q3 2026 and the two Beautiful Ads decks. It sits directly above the targeting panel, so the
+drawer now runs how it was built, then what it was set to reach, then who it landed on.
+
+Every checklist line was mapped against the API before any of it was written, which is how
+`scripts/probe-setup-fields.mjs` came to exist. 28 lines turned out to be readable from
+`audience_expansion`, `bid_strategy`, `pay_by`, `placements`, `standard_delivery`, `frequency_cap`,
+`target_cpa_local_micro`, `primary_web_event_tag`, `start_time` and `updated_at` on the line item,
+plus the targeting criteria and the creative copy already being fetched. Six are not readable at all.
+
+**The verdicts are computed in `lib/x/setup-check.ts`.** Grok receives findings that are already
+decided, the same arrangement as the benchmark and creative prompts, for the same reason: a rep who
+opens the same campaign twice must not be told two different things, and "is Optimized Targeting on"
+is a field lookup rather than a judgement.
+
+**The four-state model is the whole design, and Novig is why.** Novig's live campaigns restrict to
+21-and-over and exclude Arizona, Nevada, Maryland and Michigan. Every one of those is a checklist
+violation. Every one of them is also gambling regulation. A pass/fail checker would have opened with
+three confident instructions to break the law, in front of the first CAM who ever used the feature.
+So anything that narrows delivery — age, gender, language, geography, keyword exclusions, audience
+exclusions — can only ever be **Check**, phrased as a fact plus a question about intent, and the
+prompt forbids Grok from recommending its removal in any form. Only settings that are wrong
+regardless of the advertiser's category can **fail**: Optimized Targeting left off, accelerated
+pacing. Live on Novig's three campaigns: 20 passes, zero failures, five Checks, two Not checked.
+
+**Not checked is a real verdict, not a gap.** `UNCHECKABLE` names the six lines the API does not
+expose — video duration, aspect ratio, the CAPI half of "pixel and/or CAPI", and the rest — and the
+panel lists them. Scoring them as passes would have inflated a compliance number that a CAM might
+repeat to an advertiser. Video length is doubly unanswerable: the data does not carry duration *and*
+the two decks contradict each other on the target, so if duration ever arrives this needs a human
+decision rather than a code change.
+
+**The playbooks disagree in two more places**, both resolved in code rather than escalated. Copy
+length passes at the measured 100 characters with the checklist's tighter 40–60 named in the detail,
+so the stricter advice is visible without failing campaigns the other document would pass. Prices and
+numbers in copy are only flagged on awareness objectives, which is the reading under which both
+documents are simultaneously true.
+
+**Start hour is resolved in the account's timezone.** "Starts at midnight" is a question about the
+advertiser's budget day, and a start time read in the rep's own zone turns every compliant campaign
+elsewhere into a failure. The finding names the hour it found — 09:00 — rather than calling it
+"mid-day", because 05:00 and 23:00 cost very different fractions of a first day. The demo fixtures
+had to learn this too: `T00:00:00Z` is 8pm the previous evening in New York, so generating it would
+have had every demo campaign reporting a mid-day start.
+
 ## 6. Compare mode
 
 Multi-select campaigns, then open a comparison view with:
@@ -1029,10 +1077,11 @@ than trusted from the cookie, so removing someone takes effect on their next cli
 denies everyone: a half-configured deployment locks itself rather than opening itself.
 
 Verified by three scripts, each against a production build with the Ads API pointed at a dead port:
-`verify-hosted.sh` (18 assertions — two reps isolated, a valid cookie for an unlisted handle still
-refused, forged cookies rejected, no local fallback when hosted), `verify-local.sh` (18 — the
-migration preserves tokens and advertisers, and the cookie-free single-user path still
-works), and `verify-demo.sh` (25).
+`verify-hosted.sh` (22 assertions — two reps isolated, a valid cookie for an unlisted handle still
+refused, forged cookies rejected, no local fallback when hosted), `verify-local.sh` (32 — the
+migration preserves tokens and advertisers, the cookie-free single-user path still works, and the
+setup checklist's verdicts), and `verify-demo.sh` (54). `verify-hosted-store.mjs` adds 29 against a
+real Postgres, covering per-rep encryption and the audit trail outliving a deleted rep.
 
 ## 13. Demo mode
 

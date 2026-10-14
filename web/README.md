@@ -297,6 +297,9 @@ lib/
   x/summary-context.ts  Turns a dashboard into the prompt sent to Grok
   x/creative-context.ts Turns one campaign's creatives into a prompt, ranks pre-computed
   x/benchmark-context.ts Turns a benchmark into a prompt, verdicts pre-computed
+  x/copy-shape.ts Measures ad copy: characters, hashtags, mentions, emoji, caps
+  x/setup-check.ts One campaign's settings against the internal playbooks, decided in code
+  x/setup-context.ts Turns those findings into a prompt, verdicts pre-computed
   grok.ts         xAI client: model discovery and streaming chat
 ```
 
@@ -835,6 +838,37 @@ worth testing rather than a proven cause.
 Creatives sharing identical copy are detected and labelled, because that turned out to be common —
 Novig's Trend Genius campaign runs the same post twice, at 0.27% and 0.64% CTR. Where the copy is
 identical the prompt directs the explanation to placement, targeting, bid or the line item instead.
+
+## Setup against the playbook
+
+The drawer also checks how the campaign was *built*, against the Campaign Success Checklist and the
+two Beautiful Ads decks. 28 lines, read off the campaign, its ad groups, its targeting and its copy:
+Optimized Targeting, pacing, bid strategy, billing mode, placements, frequency caps, budget against
+target CPA, geography granularity, launch-time levers, ad group count, copy length and shape, start
+hour and edits inside the learning window.
+
+**Every verdict is decided in `lib/x/setup-check.ts`, not by the model** — the same division of labour
+as the benchmark and creative prompts. Grok is handed findings that are already decided and asked to
+explain and triage them, so a rep gets the same verdict on the same campaign every time.
+
+**Four verdicts, not two.** The fourth is the one that makes this usable. Novig's live campaigns
+restrict to 21-and-over and exclude Arizona, Nevada, Maryland and Michigan — every one of which is a
+checklist violation, and every one of which is gambling regulation. A pass/fail checker would tell a
+CAM to go and undo the law. So narrowing is always **Check**, never a failure, and the prompt forbids
+Grok from recommending the removal of an age gate, a geographic restriction or an audience exclusion:
+it may ask whether the restriction is required, and nothing more. Only settings that are wrong
+regardless of category — Optimized Targeting left off, accelerated pacing — can fail. On Novig's three
+live campaigns this reports 20 passes, zero failures, five Checks and two Not checked.
+
+**What cannot be checked says so.** `UNCHECKABLE` lists the six playbook lines the Ads API does not
+expose — video length, creative aspect ratio, the CAPI half of "pixel and/or CAPI", and so on — and
+the panel shows them rather than quietly scoring them as passes. Where the two playbooks disagree,
+notably on copy length and video duration, the prompt is told to say so rather than pick one.
+
+**Account time, not viewer time.** "Starts at midnight" is a question about the advertiser's budget
+day. Reading a start time in the rep's own timezone turns every compliant campaign in another zone
+into a failure, so the hour is resolved in the account's zone and the finding names it — 09:00, not
+"mid-day", because 05:00 and 23:00 cost very different amounts of a first day.
 
 ## Grok summaries
 

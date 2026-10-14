@@ -30,6 +30,12 @@ export type TargetingValue = {
    * looks fully configured from every other angle.
    */
   missing?: boolean;
+  /**
+   * `COUNTRIES`, `REGIONS`, `METROS`, `CITIES`, `POSTAL_CODES` — only on `LOCATION`. The panel does
+   * not need it; the setup checklist does, since "whole countries only" cannot be told from the
+   * label alone ("United States" and "Arizona, US" are both just names).
+   */
+  locationType?: string;
 };
 
 export type TargetingGroup = {
@@ -64,6 +70,8 @@ type CriterionResponse = {
   targeting_type?: string | null;
   targeting_value?: string | number | null;
   operator_type?: string | null;
+  /** Present on LOCATION only. Carried through for the setup checklist. */
+  location_type?: string | null;
 };
 
 type CustomAudienceResponse = {
@@ -257,6 +265,8 @@ export async function buildTargeting(options: {
   /** type -> negated -> label -> line items carrying it. */
   const tally = new Map<string, Map<boolean, Map<string, Set<string>>>>();
   const missingLabels = new Set<string>();
+  /** label -> `location_type`, so a value can say whether it is a country or a city. */
+  const locationTypes = new Map<string, string>();
 
   for (const criterion of criteria) {
     const type = criterion.targeting_type?.trim();
@@ -264,6 +274,9 @@ export async function buildTargeting(options: {
     const resolved = valueLabel(criterion, audienceNames);
     const label = resolved?.label ?? LABEL_BY_TYPE.get(type) ?? humanise(type);
     if (resolved?.missing) missingLabels.add(label);
+
+    const locationType = criterion.location_type?.trim();
+    if (locationType) locationTypes.set(label, locationType);
 
     const negated = criterion.operator_type === "NE";
     const byNegation = tally.get(type) ?? new Map<boolean, Map<string, Set<string>>>();
@@ -283,6 +296,7 @@ export async function buildTargeting(options: {
         lineItemIds: [...carriers],
         everywhere: carriers.size >= totalLineItems,
         ...(missingLabels.has(label) ? { missing: true } : {}),
+        ...(locationTypes.has(label) ? { locationType: locationTypes.get(label) } : {}),
       }))
       .sort(
         (a, b) => b.lineItemIds.length - a.lineItemIds.length || a.label.localeCompare(b.label),

@@ -12,6 +12,7 @@ import { join } from "node:path";
 
 import { isHosted } from "../lib/db.ts";
 import { accessStateFor } from "../lib/x/accounts.ts";
+import { buildSetupCheck, UNCHECKABLE } from "../lib/x/setup-check.ts";
 import {
   consumerCredentials,
   listUsers,
@@ -98,6 +99,114 @@ check(
   "a failure that was not a refusal blames neither",
   accessStateFor({ accessible: false, campaignsDenied: false, permissions: ["ACCOUNT_ADMIN"] }) ===
     "unavailable",
+);
+
+console.log("== the setup checklist judges settings, not the advertiser ==");
+// A base campaign that follows both playbooks. Each case below changes one thing, so a verdict
+// that moves can only have come from the setting that moved.
+const playbookLineItem = {
+  id: "li1",
+  name: "Ad group 1",
+  audienceExpansion: "EXPANDED",
+  bidStrategy: "AUTO",
+  payBy: "IMPRESSION",
+  placements: ["ALL_ON_TWITTER"],
+  standardDelivery: true,
+  frequencyCap: null,
+  targetCpa: null,
+  webEventTag: "tag1",
+  dailyBudget: 500,
+  // Midnight in New York on this date, which is EDT. Writing 05:00Z would be EST and land at 01:00.
+  startTime: "2026-09-01T04:00:00Z",
+  updatedAt: "2026-09-01T04:00:00Z",
+};
+const setupInput = (overrides = {}) => ({
+  objective: "WEBSITE_CLICKS",
+  campaignFrequencyCap: null,
+  campaignDailyBudget: 500,
+  lineItems: [playbookLineItem],
+  targeting: { status: "ok", groups: [], lineItems: 1 },
+  copy: ["Book a demo and see the difference."],
+  objectiveSiblings: 0,
+  timeZone: "America/New_York",
+  ...overrides,
+});
+const statusOf = (input, id) =>
+  buildSetupCheck(input).findings.find((finding) => finding.id === id)?.status;
+
+check("a compliant campaign fails nothing", buildSetupCheck(setupInput()).counts.fail === 0);
+check(
+  "optimized targeting left off is a failure",
+  statusOf(
+    setupInput({ lineItems: [{ ...playbookLineItem, audienceExpansion: "DEFINED" }] }),
+    "optimize-targeting",
+  ) === "fail",
+);
+check(
+  "accelerated delivery is a failure",
+  statusOf(
+    setupInput({ lineItems: [{ ...playbookLineItem, standardDelivery: false }] }),
+    "standard-pacing",
+  ) === "fail",
+);
+check(
+  "a manual bid is a judgement call, not a failure",
+  statusOf(setupInput({ lineItems: [{ ...playbookLineItem, bidStrategy: "MAX" }] }), "autobid") ===
+    "review",
+);
+check(
+  "an age restriction is never a failure, because it may be the law",
+  statusOf(
+    setupInput({
+      targeting: {
+        status: "ok",
+        lineItems: 1,
+        groups: [
+          {
+            type: "AGE",
+            included: [{ label: "21 and over", lineItemIds: ["li1"], everywhere: true }],
+            excluded: [],
+          },
+        ],
+      },
+    }),
+    "all-ages",
+  ) === "review",
+);
+check(
+  "midnight is read in the account's zone, not the viewer's",
+  statusOf(setupInput(), "midnight-start") === "pass" &&
+    statusOf(setupInput({ timeZone: "Europe/London" }), "midnight-start") === "review",
+);
+check(
+  "an off-midnight start names the hour rather than calling 05:00 mid-day",
+  buildSetupCheck(setupInput({ timeZone: "Europe/London" })).findings.find(
+    (finding) => finding.id === "midnight-start",
+  ).detail.includes("05:00"),
+);
+check(
+  "with no ad groups, no delivery setting is claimed as a pass",
+  (() => {
+    const bare = buildSetupCheck(setupInput({ lineItems: [] }));
+    // Targeting and copy are still genuinely inspectable without ad groups, so they may pass.
+    // Anything that can only be read off an ad group must not.
+    const readOffAnAdGroup = ["must-have", "delivery", "hygiene"];
+    const delivery = bare.findings.filter((finding) =>
+      readOffAnAdGroup.includes(finding.section),
+    );
+    return (
+      bare.findings.find((finding) => finding.id === "no-line-items")?.status === "unchecked" &&
+      delivery.every((finding) => finding.status !== "pass")
+    );
+  })(),
+);
+check(
+  "every finding carries a detail, so the panel never shows a bare verdict",
+  buildSetupCheck(setupInput()).findings.every((finding) => finding.detail.trim().length > 0),
+);
+check(
+  "what cannot be checked is listed, not guessed at",
+  UNCHECKABLE.length > 0 && UNCHECKABLE.every((entry) => entry.rule && entry.why),
 );
 
 console.log("== it does not run twice ==");

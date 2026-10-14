@@ -108,6 +108,26 @@ export type DemoCampaign = {
      */
     darkSince: number | null;
   };
+  /**
+   * Delivery settings the setup checklist reads. Defaulted to a campaign that follows the playbook,
+   * so a spec only names what it gets wrong — which keeps the fixtures readable, and means adding a
+   * new check does not silently fail every demo campaign at once.
+   */
+  setup: {
+    /** `EXPANDED` is Optimized Targeting on. `DEFINED` is off, and is the API's own default. */
+    audienceExpansion: string;
+    /** `AUTO` is AutoBid; `MAX` and `TARGET` are manual bids. */
+    bidStrategy: string;
+    /** `IMPRESSION` is the billing mode the checklist prefers. */
+    payBy: string;
+    /** `["ALL_ON_TWITTER"]` is every placement; a named list cannot pick up ones X adds later. */
+    placements: string[];
+    /** False is accelerated delivery, which spends the flight as fast as the auction allows. */
+    standardDelivery: boolean;
+    frequencyCap: number | null;
+    /** Hour of the account-local day the flight starts. 0 is the midnight the checklist wants. */
+    startHour: number;
+  };
   lineItems: DemoLineItem[];
 };
 
@@ -162,6 +182,8 @@ type CampaignSpec = {
    */
   totalBudgetMultiple?: number;
   lineItems?: LineItemSpec[];
+  /** Only what this campaign gets wrong; everything unnamed follows the playbook. */
+  setup?: Partial<DemoCampaign["setup"]>;
 };
 
 /** Weekday delivery curve, and its mean — the factor a daily budget has to be derived against. */
@@ -272,9 +294,25 @@ function buildCampaign(accountId: string, spec: CampaignSpec): DemoCampaign {
       burstRate: spec.burstRate ?? null,
       darkSince: spec.darkSince ?? null,
     },
+    setup: { ...PLAYBOOK_SETUP, ...spec.setup },
     lineItems,
   };
 }
+
+/**
+ * A campaign set up the way both playbooks ask for. Every demo campaign starts here and overrides
+ * only what it is meant to get wrong, so the checklist's pass state is the default rather than
+ * something each fixture has to spell out.
+ */
+const PLAYBOOK_SETUP: DemoCampaign["setup"] = {
+  audienceExpansion: "EXPANDED",
+  bidStrategy: "AUTO",
+  payBy: "IMPRESSION",
+  placements: ["ALL_ON_TWITTER"],
+  standardDelivery: true,
+  frequencyCap: null,
+  startHour: 0,
+};
 
 /**
  * App-install advertiser with a deep, concentrated book. Exercises the objective KPI leading over
@@ -300,7 +338,12 @@ const LUMEN: CampaignSpec[] = [
    */
   { key: "engage", name: "Community Engagement", objective: "ENGAGEMENTS", startDaysAgo: 58, dailyImpressions: 150_000, cpm: 6.1, ctr: 0.0064, engagementRate: 0.027 },
   { key: "engage-evergreen", name: "Evergreen Engagement — Broad", objective: "ENGAGEMENTS", startDaysAgo: 72, dailyImpressions: 240_000, cpm: 5.4, ctr: 0.0058, engagementRate: 0.023 },
-  { key: "engage-replies", name: "Reply Prompts — Fitness", objective: "ENGAGEMENTS", startDaysAgo: 41, dailyImpressions: 90_000, cpm: 7.8, ctr: 0.0072, engagementRate: 0.031 },
+  /**
+   * Off playbook in the ways that are plausibly deliberate rather than wrong — a hand-picked
+   * placement list, a manual bid, a frequency cap — so the panel has a campaign that exercises the
+   * "check this is intentional" verdict without a single hard failure.
+   */
+  { key: "engage-replies", name: "Reply Prompts — Fitness", objective: "ENGAGEMENTS", startDaysAgo: 41, dailyImpressions: 90_000, cpm: 7.8, ctr: 0.0072, engagementRate: 0.031, setup: { placements: ["TWITTER_TIMELINE"], bidStrategy: "MAX", payBy: "ENGAGEMENT", frequencyCap: 3 } },
   { key: "engage-topics", name: "Topic Targeting — Wellness", objective: "ENGAGEMENTS", startDaysAgo: 66, dailyImpressions: 130_000, cpm: 6.7, ctr: 0.0061, engagementRate: 0.029 },
   /**
    * A trend buy nobody has labelled, kept deliberately unlabelled: it delivers on two days in five
@@ -353,7 +396,13 @@ const HARBORLINE: CampaignSpec[] = [
    * commitment is half again what the flight will deliver at that rate. This is the case where
    * raising the daily budget is the real lever, and the one the advice was built for.
    */
-  { key: "autumn-flash", name: "Autumn Flash Sale — Clicks", objective: "WEBSITE_CLICKS", startDaysAgo: 24, endDaysAgo: -18, totalBudgetMultiple: 1.5, capUse: 0.97, dailyImpressions: 150_000, cpm: 5.6, ctr: 0.0068 },
+  /**
+   * The campaign the setup checklist exists for. It is behind pace *and* misconfigured in the two
+   * ways that explain it: Optimized Targeting never switched on, and delivery set to accelerated.
+   * Both are real fails rather than judgement calls, so the panel has something unambiguous to show
+   * and Grok has a reason to lead with delivery rather than with copy.
+   */
+  { key: "autumn-flash", name: "Autumn Flash Sale — Clicks", objective: "WEBSITE_CLICKS", startDaysAgo: 24, endDaysAgo: -18, totalBudgetMultiple: 1.5, capUse: 0.97, dailyImpressions: 150_000, cpm: 5.6, ctr: 0.0068, setup: { audienceExpansion: "DEFINED", standardDelivery: false, startHour: 14 } },
   /**
    * Behind pace with headroom to spare: barely a third of its cap is being used, so more budget
    * would change nothing and the constraint is bid or targeting. The contrast with the campaign

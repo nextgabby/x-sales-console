@@ -4,6 +4,7 @@
  */
 import type { Totals } from "@/lib/x/stats";
 import type { CampaignPacing } from "@/lib/x/pacing";
+import type { SetupCheck } from "@/lib/x/setup-check";
 import type { TargetingSummary } from "@/lib/x/targeting";
 
 export type CampaignRow = {
@@ -171,5 +172,7 @@ export type CampaignDetailPayload = {
   promotedPosts: PromotedPostRow[];
   /** What the campaign is set to target, as against `AudienceBreakdown`, which is who it reached. */
   targeting: TargetingSummary;
+  /** The campaign measured against the internal setup playbooks. See `lib/x/setup-check.ts`. */
+  setup: SetupCheck;
   warnings: string[];
 };

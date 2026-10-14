@@ -55,6 +55,18 @@ explanation for a campaign that looks broken.
 measured them rather than as the campaign declared them, and what the campaign was actually set to
 target.
 
+**Setup against the playbook.** Open any campaign and it is checked, line by line, against the
+Campaign Success Checklist and the Beautiful Ads decks — Optimized Targeting, pacing, bidding,
+billing, placements, frequency caps, budget against target CPA, geography, launch-time levers, ad
+group count, copy length, start hour, edits during the learning period. 28 lines in all, and the
+lines the API cannot answer are listed as such rather than counted as passes.
+
+Two things it deliberately will not do. It does not fail a campaign for an age gate, a state
+exclusion or a keyword exclusion — those are usually legal requirements, this tool cannot see the
+advertiser's category, and telling you to remove one would be telling you to break the law. Those are
+flagged as *Check*, with the setting named, for you to confirm. And where the two playbooks disagree,
+it says they disagree instead of picking one for you.
+
 **Compare mode.** Tick several campaigns and put them side by side.
 
 **Grok.** On any panel, a written summary and a question box. It only ever gets the figures already

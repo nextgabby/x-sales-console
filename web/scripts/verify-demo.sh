@@ -346,6 +346,86 @@ s=[x for x in t['signals'] if 'lookalike' in x['title']]
 print(len(s)==1 and '@lumenfitness' in s[0]['detail'])
 ")"
 
+echo "== setup checklist =="
+# Each account's own timezone, not the viewer's: "starts at midnight" is a question about the
+# account's budget day, and reading it in another zone turns every compliant campaign into a fail.
+AF=$(python3 -c "
+import json
+d=json.load(open('/tmp/v-d2.json'))
+print([r['id'] for r in d['campaigns'] if r['name'].startswith('Autumn Flash')][0])
+")
+curl -s "$B/api/accounts/18ce5dem0002/campaigns/$AF?days=30&timezone=America/Los_Angeles&objectiveSiblings=2" > /tmp/v-setup-bad.json
+CE=$(python3 -c "
+import json
+d=json.load(open('/tmp/v-d1.json'))
+print([r['id'] for r in d['campaigns'] if r['name']=='Community Engagement'][0])
+")
+curl -s "$B/api/accounts/18ce5dem0001/campaigns/$CE?days=30&timezone=America/New_York&objectiveSiblings=2" > /tmp/v-setup-ok.json
+RP=$(python3 -c "
+import json
+d=json.load(open('/tmp/v-d1.json'))
+print([r['id'] for r in d['campaigns'] if r['name'].startswith('Reply Prompts')][0])
+")
+curl -s "$B/api/accounts/18ce5dem0001/campaigns/$RP?days=30&timezone=America/New_York&objectiveSiblings=2" > /tmp/v-setup-review.json
+
+check "a playbook campaign fails nothing" "$(python3 -c "
+import json
+s=json.load(open('/tmp/v-setup-ok.json'))['setup']
+print(s['counts']['fail']==0 and s['counts']['pass']>15)
+")"
+check "optimized targeting off and accelerated pacing both fail" "$(python3 -c "
+import json
+s=json.load(open('/tmp/v-setup-bad.json'))['setup']
+bad={f['id'] for f in s['findings'] if f['status']=='fail'}
+print(s['counts']['fail']==2 and 'optimize-targeting' in bad and 'standard-pacing' in bad)
+")"
+check "a hand-picked placement or manual bid is a review, not a failure" "$(python3 -c "
+import json
+s=json.load(open('/tmp/v-setup-review.json'))['setup']
+by={f['id']: f['status'] for f in s['findings']}
+print(s['counts']['fail']==0 and by['all-placements']=='review' and by['autobid']=='review'
+      and by['no-frequency-caps']=='review')
+")"
+check "an age restriction is never called a failure" "$(python3 -c "
+import json
+for path in ('/tmp/v-setup-bad.json', '/tmp/v-setup-ok.json', '/tmp/v-setup-review.json'):
+    s=json.load(open(path))['setup']
+    age=[f for f in s['findings'] if f['id']=='all-ages'][0]
+    assert age['status']=='review', (path, age['status'])
+    assert 'legal requirement' in age['detail'], path
+print(True)
+")"
+check "midnight reads in the account timezone, not UTC" "$(python3 -c "
+import json
+ok=[f for f in json.load(open('/tmp/v-setup-ok.json'))['setup']['findings'] if f['id']=='midnight-start'][0]
+bad=[f for f in json.load(open('/tmp/v-setup-bad.json'))['setup']['findings'] if f['id']=='midnight-start'][0]
+print(ok['status']=='pass' and bad['status']=='review' and '14:00' in bad['detail'])
+")"
+check "nothing counts as a pass without data behind it" "$(python3 -c "
+import json
+s=json.load(open('/tmp/v-setup-bad.json'))['setup']
+print(all(f['detail'].strip() for f in s['findings'])
+      and all(f['status']!='pass' for f in s['findings'] if f['status']=='unchecked'))
+")"
+check "every ad group count reads as English" "$(python3 -c "
+import json
+for path in ('/tmp/v-setup-bad.json', '/tmp/v-setup-ok.json', '/tmp/v-setup-review.json'):
+    for f in json.load(open(path))['setup']['findings']:
+        assert 'every ad groups' not in f['detail'].lower(), (path, f['id'], f['detail'])
+print(True)
+")"
+check "setup summary explains the failures and refuses to undo the age gate" "$(
+python3 -c "
+import json
+json.dump({'asUser': None, 'days': 30, 'timezone': 'America/Los_Angeles'}, open('/tmp/v-body-setup.json','w'))
+"
+curl -s -X POST "$B/api/accounts/18ce5dem0002/campaigns/$AF/setup-summary" -H 'content-type: application/json' --data @/tmp/v-body-setup.json > /tmp/v-setup.txt
+python3 -c "
+t=open('/tmp/v-setup.txt').read()
+print('Sample response' in t and len(t) > 40)
+"
+)"
+
 echo "== AI =="
 check "targeting review returns labelled sample text" "$(
 curl -s -X POST "$B/api/accounts/18ce5dem0001/campaigns/$RT/targeting-summary" -H 'content-type: application/json' --data @/tmp/v-body-empty.json > /tmp/v-trev.txt

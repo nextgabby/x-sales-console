@@ -1,5 +1,6 @@
 import { formatCurrency, formatNumber } from "../format";
 import type { ChatMessage } from "../grok";
+import { describeCopy } from "./copy-shape";
 import { isRankable, MIN_CLICKS_TO_RANK, MIN_IMPRESSIONS_TO_RANK } from "./creatives";
 import type {
   CampaignDetailPayload,
@@ -82,36 +83,6 @@ function rankBy(posts: PromotedPostRow[], spec: MetricSpec): Map<string, Ranked>
   );
 }
 
-/** Words and characters ignoring URLs, so a t.co link does not read as 23 characters of copy. */
-function copyShape(text: string): string {
-  const withoutUrls = text.replace(/https?:\/\/\S+/g, " ").trim();
-  const words = withoutUrls.split(/\s+/).filter(Boolean);
-
-  const count = (pattern: RegExp) => (text.match(pattern) ?? []).length;
-  const links = count(/https?:\/\/\S+/g);
-  const hashtags = count(/#\w+/g);
-  const mentions = count(/@\w+/g);
-  const emoji = count(/\p{Extended_Pictographic}/gu);
-  const capsWords = words.filter(
-    (word) => word.length > 2 && word === word.toUpperCase() && /[A-Z]/.test(word),
-  ).length;
-
-  const lineCount = withoutUrls.split("\n").filter((line) => line.trim()).length;
-
-  const parts = [`${withoutUrls.length} characters`, `${words.length} words`];
-  if (lineCount > 1) parts.push(`${lineCount} lines`);
-  if (links) parts.push(`${links} link${links > 1 ? "s" : ""}`);
-  else parts.push("no link");
-  if (hashtags) parts.push(`${hashtags} hashtag${hashtags > 1 ? "s" : ""}`);
-  if (mentions) parts.push(`${mentions} mention${mentions > 1 ? "s" : ""}`);
-  if (emoji) parts.push(`${emoji} emoji`);
-  if (capsWords) parts.push(`${capsWords} all-caps word${capsWords > 1 ? "s" : ""}`);
-  if (/\?/.test(withoutUrls)) parts.push("asks a question");
-  if (/!/.test(withoutUrls)) parts.push("uses an exclamation");
-  if (/\d/.test(withoutUrls)) parts.push("contains a number");
-
-  return parts.join(", ");
-}
 
 /**
  * Chooses which creatives to describe. Every rankable one comes first, since those are the only
@@ -148,7 +119,7 @@ function creativeBlock(options: {
 
   if (post.text) {
     lines.push(`   copy: ${JSON.stringify(post.text)}`);
-    lines.push(`   copy shape: ${copyShape(post.text)}`);
+    lines.push(`   copy shape: ${describeCopy(post.text)}`);
   } else {
     lines.push("   copy: not available for this creative");
   }

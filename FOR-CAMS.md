@@ -81,6 +81,12 @@ conclusion instead of producing one anyway.
 Two kinds of campaign do not behave like an ordinary auction buy, and nothing in the Ads API marks
 them, so the console cannot know unless you say. Open a campaign and set its label once.
 
+**Labels are shared with the team, unlike everything else here.** A Trend Genius buy is one for
+everybody, so anyone else who can open that advertiser sees your label and can change it. That is
+deliberate — a label changes the pacing verdict and the comparison cohort, and if labels were
+personal two CAMs would get different answers on the same campaign — but it is the one thing you
+write that a colleague reads.
+
 **Trend Genius** — delivers only when a matching trend fires. Labelling it stops the console calling
 it "behind pace" for gaps that are how the buy works, while still tracking budget at risk, because a
 commitment that is not being triggered may genuinely go unspent.
@@ -108,7 +114,8 @@ dashboard says so where it matters. Worth a beat before you quote a very recent 
 budget or a creative, by design.
 
 **It is your access, not shared access.** Every request is signed with your own token. You cannot see
-an account you have not been granted, and nobody sees yours.
+an account you have not been granted, and nobody inherits yours. Campaign labels are the one
+exception, and they are shared on purpose — see above.
 
 ---
 

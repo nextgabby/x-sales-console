@@ -958,6 +958,21 @@ it to an advertiser.
 **`auto_created` cannot stand in for it.** It is `true` for all thirteen default events, so it
 identifies the standard set rather than anything lead-specific.
 
+**`_deprecated_LEAD_GENERATION` is a real objective value, and it is not this product.** It appears
+verbatim in the public objective enum — one live account carries ten line items on it — and it is
+the old native lead-gen card, dead for years. The same trap exists one level down, where
+`optimization_preference = 7` is labelled `LEAD GENERATION` internally and is equally a leftover.
+Anyone searching the API for "lead" finds both of these and neither is the product being asked
+about, which is stored as an ordinary `WEBSITE_CLICKS` buy.
+
+**A readable account is not a representative one.** `GET /accounts` with `x-as-user` lists what the
+advertiser can see rather than what you may open, and for two large brands checked here the
+accounts that answered were the dormant legacy ones — 22 line items and no conversion tracking on
+one, and on the other 3,223 line items whose thirteen tags have `last_tracked_at: null` and status
+`UNVERIFIED`, meaning the pixel was never installed. Every agency-managed account holding the
+current spend returned 403. So "this brand uses the product" and "the product is visible on the
+account we can read" are separate claims, and only the second one matters here.
+
 **`segmentation_type=CONVERSION_TAGS` is real, and is the path if this ever becomes possible.** It
 appears in the segmentation enum and an async job accepts it at both `CAMPAIGN` and `LINE_ITEM`
 grain. Two constraints come with it: it refuses to be paired with anything but `WEB_CONVERSION`

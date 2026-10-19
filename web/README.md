@@ -286,6 +286,7 @@ lib/
   x/time.ts       Timezone-aligned reporting ranges and window chunking
   x/stats.ts      Stats fetching, stitching, and derived metrics
   x/pacing.ts     Budget and flight rollup from line items, and the pacing verdicts
+  x/funding.ts    Pacing an insertion order against its own commitment and flight
   x/creatives.ts  When a creative has delivered enough for its rates to be comparable
   x/dashboard.ts  Builds the dashboard payload, shared by the API route and the summary endpoint
   x/campaign-detail.ts  Builds the drawer payload, shared with the creative AI endpoint
@@ -480,6 +481,37 @@ What they change is in `buildBenchmark()`: when the campaign under review is cus
 other custom campaigns on the objective are held out of the cohort, so the comparison answers "is
 this unit better than our regular buys" rather than a mixture of that and "better than our other
 custom units". See the benchmark section below.
+
+## Funding sources, and why "active" is the wrong filter
+
+A funding source is where the money comes from: usually an insertion order, occasionally a credit
+card. It has a commitment and a flight of its own, and those are what finance and the advertiser
+quote, so a campaign-level pacing verdict does not answer the question a rep is actually asked —
+*are we going to spend the order?* `lib/x/funding.ts` answers that, separately from `x/pacing.ts`,
+because an insertion order has no line items, no daily budget and no delivery of its own.
+
+**Filtering on `entity_status` would show exactly the wrong rows.** On one real account the source
+described as "(no payment method has been set up yet)" is `ACTIVE` with `able_to_fund: true` and
+nothing in it, while three insertion orders holding $928,000 between them are `PAUSED`. A status
+filter keeps the empty card and hides the money. `isLiveCommitment()` therefore tests funded and in
+flight instead — a funded amount above zero, with today inside the start and end dates — whatever
+the status says.
+
+**A paused order reads as budget at risk, with the reason, not as behind pace.** "Behind" sends a
+rep to raise campaign budgets, which cannot work when the source is blocked from spending at all, so
+`blocked` outranks the pace verdict and carries X's own `reasons_not_able_to_fund` rather than
+anything inferred from the status.
+
+**Spend is fetched per source, not summed from campaigns.** `entity=FUNDING_INSTRUMENT` is a valid
+stats entity, and an order's spend equals the sum of its campaigns' exactly — verified on a live
+account at $37,666.03 against $20,870.21 + $7,327.18 + $9,468.64. Fetching it directly means an
+order that funds campaigns outside the selected window still reports correctly, and it costs six
+requests for five orders over a 39-day flight because `fetchDailyStats` already chunks around the
+endpoint's 7-day cap.
+
+**The panel draws two bars per source, not one.** Share of commitment spent, and share of flight
+elapsed. A single bar cannot show that 53% spent is a problem only because 68% of the flight is
+gone; the gap between the two bars is the entire verdict.
 
 ## Versus the brand's own history
 

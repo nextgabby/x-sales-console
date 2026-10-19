@@ -28,6 +28,7 @@ import {
   type CampaignFlight,
   type LineItemBudget,
 } from "./pacing";
+import { computeFundingPacing, isLiveCommitment } from "./funding";
 import { readCampaignLabels, type CampaignLabelKind, type XCredentials } from "../store";
 import type { CampaignRow, DashboardPayload } from "@/app/accounts/[accountId]/types";
 import type { Actor } from "../auth/actor";
@@ -430,6 +431,86 @@ export async function buildDashboard(options: {
     }
   }
 
+  /**
+   * Flight-to-date spend per funding instrument, for the ones that represent a live commitment.
+   *
+   * Asked for by sales: campaigns can each pace fine while the insertion order they draw on falls
+   * short, and the IO is the number the advertiser agreed to. Fetched against
+   * `entity=FUNDING_INSTRUMENT` rather than summed from the campaign rows, because the campaign
+   * backfill above only covers campaigns carrying their own total budget — summing those would
+   * understate the IO and report a fully committed buy as underspent.
+   *
+   * Scoped to live commitments to bound the cost. Every instrument ever used would mean walking
+   * years of closed flights in 7-day windows, and synchronous analytics is capped at 250 requests
+   * per 15 minutes across the whole category rather than per account.
+   */
+  const instrumentSpend = new Map<string, number>();
+  const pacedInstruments = skipComparisons
+    ? []
+    : fundingInstruments.filter((instrument) =>
+        isLiveCommitment({
+          fundedAmount:
+            instrument.funded_amount_local_micro != null
+              ? microsToCurrency(instrument.funded_amount_local_micro)
+              : null,
+          startTime: instrument.start_time ?? null,
+          endTime: instrument.end_time ?? null,
+        }),
+      );
+
+  if (pacedInstruments.length > 0) {
+    const earliest = pacedInstruments.reduce<string | null>((found, instrument) => {
+      const start = instrument.start_time?.slice(0, 10) ?? null;
+      if (!start) return found;
+      return !found || start < found ? start : found;
+    }, null);
+    const from = earliest && earliest > lookbackFloor ? earliest : lookbackFloor;
+
+    if (dayDiff(from, lastCompleteDay) >= 0) {
+      const instrumentRange = buildRangeBetween(from, lastCompleteDay, account.timezone);
+      const instrumentStats = await fetchDailyStats({
+        credentials,
+        accountId,
+        asUser,
+        entity: "FUNDING_INSTRUMENT",
+        entityIds: pacedInstruments.map((instrument) => instrument.id),
+        range: instrumentRange,
+        metricGroups: "BILLING",
+        actor,
+      });
+
+      if (instrumentStats.failedRequests > 0) {
+        warnings.push(
+          "Funding source pacing is unavailable; insertion order spend history did not load.",
+        );
+      } else {
+        for (const [id, series] of Object.entries(instrumentStats.series)) {
+          const spend = dailySpend(series);
+          const start = pacedInstruments
+            .find((instrument) => instrument.id === id)
+            ?.start_time?.slice(0, 10);
+          // Only days inside the instrument's own flight count towards its commitment.
+          instrumentSpend.set(
+            id,
+            instrumentRange.dates.reduce(
+              (total, date, index) =>
+                !start || date >= start ? total + (spend[index] ?? 0) : total,
+              0,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  /** Campaigns drawing on each instrument in this window, for context beside the pacing. */
+  const campaignsPerInstrument = new Map<string, number>();
+  for (const campaign of campaigns) {
+    const id = campaign.funding_instrument_id;
+    if (!id) continue;
+    campaignsPerInstrument.set(id, (campaignsPerInstrument.get(id) ?? 0) + 1);
+  }
+
   /** Flight-to-date spend, or null when the fetched history does not cover the whole flight. */
   const flightSpendFor = (id: string, flight: CampaignFlight): number | null => {
     const from = flight.startTime?.slice(0, 10);
@@ -628,20 +709,43 @@ export async function buildDashboard(options: {
       included: includeTakeovers,
     },
     partial,
-    fundingInstruments: fundingInstruments.map((instrument) => ({
-      id: instrument.id,
-      description: instrument.description ?? null,
-      currency: instrument.currency ?? null,
-      creditLimit:
-        instrument.credit_limit_local_micro != null
-          ? microsToCurrency(instrument.credit_limit_local_micro)
-          : null,
-      fundedAmount:
+    fundingInstruments: fundingInstruments.map((instrument) => {
+      const fundedAmount =
         instrument.funded_amount_local_micro != null
           ? microsToCurrency(instrument.funded_amount_local_micro)
+          : null;
+      const reasonsNotAbleToFund = instrument.reasons_not_able_to_fund ?? [];
+      return {
+        id: instrument.id,
+        description: instrument.description ?? null,
+        currency: instrument.currency ?? null,
+        creditLimit:
+          instrument.credit_limit_local_micro != null
+            ? microsToCurrency(instrument.credit_limit_local_micro)
+            : null,
+        fundedAmount,
+        ableToFund: Boolean(instrument.able_to_fund),
+        type: instrument.type ?? null,
+        ioHeader: instrument.io_header ?? null,
+        entityStatus: instrument.entity_status ?? null,
+        startTime: instrument.start_time ?? null,
+        endTime: instrument.end_time ?? null,
+        reasonsNotAbleToFund,
+        campaigns: campaignsPerInstrument.get(instrument.id) ?? 0,
+        pacing: instrumentSpend.has(instrument.id)
+          ? computeFundingPacing({
+              id: instrument.id,
+              fundedAmount,
+              startTime: instrument.start_time ?? null,
+              endTime: instrument.end_time ?? null,
+              entityStatus: instrument.entity_status ?? null,
+              ableToFund: Boolean(instrument.able_to_fund),
+              reasonsNotAbleToFund,
+              spendToDate: instrumentSpend.get(instrument.id) ?? 0,
+            })
           : null,
-      ableToFund: Boolean(instrument.able_to_fund),
-    })),
+      };
+    }),
     warnings,
     ...(includeRawSeries ? { rawSeries: currentSeries } : {}),
   };

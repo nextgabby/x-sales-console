@@ -143,8 +143,12 @@ check "a custom creative label does not suppress a real pacing problem" "$(pytho
 import json
 d=json.load(open('/tmp/v-lab1.json'))
 r=[r for r in d['campaigns'] if r['name']=='Launch Thread — Custom Unit'][0]
+# Which lever is deliberately not pinned. The universe is generated relative to today, so whether
+# the daily cap is binding drifts with the calendar; what must not drift is that a custom label
+# still yields a shortfall with something to do about it, rather than being waved through.
 print(r['pacing']['label']=='custom' and r['pacing']['status']=='underpacing'
-      and r['pacing']['advice']['lever']=='raise-budget')
+      and r['pacing']['advice']['lever'] in ('raise-budget','fix-delivery')
+      and r['pacing']['advice']['requiredDaily'] > r['pacing']['advice']['currentDaily'])
 ")"
 # The comparison the custom labels exist for: is a bespoke unit better than the brand's regular buys
 # on the same objective. The assertions pin the part that is easy to break silently — that the cohort
@@ -344,6 +348,43 @@ import json
 t=json.load(open('/tmp/v-tgt3.json'))['targeting']
 s=[x for x in t['signals'] if 'lookalike' in x['title']]
 print(len(s)==1 and '@lumenfitness' in s[0]['detail'])
+")"
+
+echo "== funding sources =="
+check "an insertion order is paced against its own flight" "$(python3 -c "
+import json
+d=json.load(open('/tmp/v-d2.json'))
+ros=[f for f in d['fundingInstruments'] if 'ROS Media' in (f['description'] or '')][0]
+p=ros['pacing']
+# Behind because 53% of the commitment is spent with 68% of the flight gone.
+print(p['status']=='underpacing' and p['atRisk']>0
+      and p['shareSpent']<p['shareElapsed'] and ros['ioHeader']=='T3310041'
+      and ros['type']=='INSERTION_ORDER' and ros['campaigns']>0)
+")"
+check "a paused order reports why rather than calling it behind" "$(python3 -c "
+import json
+d=json.load(open('/tmp/v-d2.json'))
+res=[f for f in d['fundingInstruments'] if 'Always On Reserve' in (f['description'] or '')][0]
+p=res['pacing']
+print(p['status']=='blocked' and p['blockedReason']=='paused'
+      and p['atRisk']==res['fundedAmount'] and res['entityStatus']=='PAUSED')
+")"
+check "an empty card is carried but never paced" "$(python3 -c "
+import json
+d=json.load(open('/tmp/v-d2.json'))
+card=[f for f in d['fundingInstruments'] if f['type']=='CREDIT_CARD'][0]
+# ACTIVE and able to fund with nothing in it: the row an entity_status filter would have kept.
+print(card['entityStatus']=='ACTIVE' and card['ableToFund'] is True
+      and card['fundedAmount']==0 and card['pacing'] is None)
+")"
+check "an order's spend equals the campaigns drawing on it" "$(python3 -c "
+import json
+d=json.load(open('/tmp/v-d2.json'))
+ros=[f for f in d['fundingInstruments'] if 'ROS Media' in (f['description'] or '')][0]
+# Not an identity: the order is paced over its whole flight, the rows over the selected window,
+# so the window's campaign spend has to be a strict subset of the order's flight-to-date spend.
+window=sum(r['totals']['spend'] for r in d['campaigns'] if not r['takeover'])
+print(0 < window <= ros['pacing']['spendToDate'] + 1)
 ")"
 
 echo "== setup checklist =="

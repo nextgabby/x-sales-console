@@ -10,6 +10,7 @@ import { formatCurrency, formatDayLabel, formatTimezone, titleCase } from "@/lib
 import { CampaignDrawer } from "./campaign-drawer";
 import { CampaignTable } from "./campaign-table";
 import { KpiTiles } from "./kpi-tiles";
+import { FundingPanel } from "./funding-panel";
 import { PacingPanel } from "./pacing-panel";
 import { TrendChart, type TrendMetric } from "./trend-chart";
 import type { CampaignRow, DashboardPayload } from "./types";
@@ -253,6 +254,17 @@ export function DashboardView({ accountId }: { accountId: string }) {
             summary={data.pacing}
             campaigns={data.campaigns}
             currency={data.account.currency}
+          />
+
+          {/*
+            Directly below campaign pacing, because the two answer the same question at different
+            levels and a rep reading one will want the other: campaigns can each pace fine while
+            the insertion order funding them falls short.
+          */}
+          <FundingPanel
+            instruments={data.fundingInstruments}
+            currency={data.account.currency}
+            timeZone={data.account.timezone}
           />
 
           <TrendChart

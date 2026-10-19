@@ -141,7 +141,7 @@ export async function fetchDailyStats(options: {
   credentials: XCredentials;
   accountId: string;
   asUser: string | null;
-  entity: "CAMPAIGN" | "LINE_ITEM" | "PROMOTED_TWEET";
+  entity: "CAMPAIGN" | "LINE_ITEM" | "PROMOTED_TWEET" | "FUNDING_INSTRUMENT";
   entityIds: string[];
   range: DateRange;
   metricGroups: string;

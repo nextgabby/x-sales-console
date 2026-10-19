@@ -688,6 +688,37 @@ elsewhere into a failure. The finding names the hour it found — 09:00 — rath
 had to learn this too: `T00:00:00Z` is 8pm the previous evening in New York, so generating it would
 have had every demo campaign reporting a mid-day start.
 
+## 5h. How it was built — funding source pacing
+
+Asked for by a CAM as "filter funding sources to only the ones that are active, and show start and
+end dates plus pacing against each". The filter turned out to be the interesting half.
+
+**"Active" cannot mean `entity_status`.** The probe against a live account returned a source called
+"(no payment method has been set up yet)" that is `ACTIVE` and able to fund with nothing in it, next
+to three insertion orders holding $928,000 that are all `PAUSED`. Had the filter been built the
+obvious way it would have shown the empty card and hidden the budget — the precise opposite of the
+request. `isLiveCommitment()` tests funded and in flight instead, so a paused order carrying money
+stays visible and the empty card falls away.
+
+**Three sequential failures that all looked like the entity being unsupported.** `granularity=TOTAL`
+over the flight failed, then `DAY` rejected UTC midnight, then `DAY` failed over 30 days too. Each
+looked like `entity=FUNDING_INSTRUMENT` not being a real entity. Adding a `CAMPAIGN` control to the
+probe settled it: campaign requests failed identically at 30 days, which proved the 7-day cap
+belongs to the endpoint rather than the entity — and that `fetchDailyStats`, which already chunks
+for exactly this reason, would carry it. A flight-to-date fetch for five sources cost six requests.
+
+**Pacing lives in its own module, not in `x/pacing.ts`.** An insertion order has no line items, no
+daily budget and no delivery, so none of the campaign machinery — the two bases, the trailing-7-day
+fallback, `dailyStake()` — applies. It has exactly one basis: a commitment and a flight.
+
+**A paused order is budget at risk, not a campaign to fix.** `blocked` outranks the pace verdict and
+quotes X's `reasons_not_able_to_fund`, because telling a rep an order is "behind" when it is barred
+from spending sends them to raise budgets that cannot deliver.
+
+**Two bars, because one cannot carry the verdict.** 53% of the commitment spent is fine at day 10
+and alarming at day 37. The panel draws spend share against flight share, and the gap between them
+is the finding.
+
 ## 6. Compare mode
 
 Multi-select campaigns, then open a comparison view with:
@@ -1078,9 +1109,9 @@ denies everyone: a half-configured deployment locks itself rather than opening i
 
 Verified by three scripts, each against a production build with the Ads API pointed at a dead port:
 `verify-hosted.sh` (22 assertions — two reps isolated, a valid cookie for an unlisted handle still
-refused, forged cookies rejected, no local fallback when hosted), `verify-local.sh` (32 — the
+refused, forged cookies rejected, no local fallback when hosted), `verify-local.sh` (42 — the
 migration preserves tokens and advertisers, the cookie-free single-user path still works, and the
-setup checklist's verdicts), and `verify-demo.sh` (54). `verify-hosted-store.mjs` adds 29 against a
+setup checklist's and funding sources' verdicts), and `verify-demo.sh` (58). `verify-hosted-store.mjs` adds 29 against a
 real Postgres, covering per-rep encryption and the audit trail outliving a deleted rep.
 
 ## 13. Demo mode

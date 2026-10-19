@@ -12,6 +12,7 @@ import { join } from "node:path";
 
 import { isHosted } from "../lib/db.ts";
 import { accessStateFor } from "../lib/x/accounts.ts";
+import { computeFundingPacing, isLiveCommitment } from "../lib/x/funding.ts";
 import { buildSetupCheck, UNCHECKABLE } from "../lib/x/setup-check.ts";
 import {
   consumerCredentials,
@@ -99,6 +100,96 @@ check(
   "a failure that was not a refusal blames neither",
   accessStateFor({ accessible: false, campaignsDenied: false, permissions: ["ACCOUNT_ADMIN"] }) ===
     "unavailable",
+);
+
+console.log("== an insertion order is paced on its commitment, not its status ==");
+// Modelled on Novig: a 54-day flight, 39 days in, with the real account's shape of instruments.
+const FLIGHT = { startTime: "2026-09-09", endTime: "2026-11-02" };
+const NOW = new Date("2026-10-18T12:00:00Z");
+const instrument = (overrides = {}) => ({
+  id: "io1",
+  fundedAmount: 928_000,
+  ...FLIGHT,
+  entityStatus: "ACTIVE",
+  ableToFund: true,
+  reasonsNotAbleToFund: [],
+  spendToDate: 533_445,
+  ...overrides,
+});
+
+check(
+  "a funded order inside its flight is a live commitment",
+  isLiveCommitment(instrument(), NOW),
+);
+check(
+  "an empty credit card is not, however active X says it is",
+  // The literal Novig row: ACTIVE, able to fund, nothing in it. Status would have kept this.
+  isLiveCommitment(
+    { fundedAmount: 0, startTime: "2026-07-27", endTime: null },
+    NOW,
+  ) === false,
+);
+check(
+  "a paused order holding budget still is, because the money is still committed",
+  isLiveCommitment(instrument({ entityStatus: "PAUSED", ableToFund: false }), NOW),
+);
+check(
+  "an order whose flight has closed is not shown by default",
+  isLiveCommitment({ fundedAmount: 500_000, startTime: "2026-01-01", endTime: "2026-03-01" }, NOW) ===
+    false,
+);
+check(
+  "spending behind the flight is behind, and the shortfall is quantified",
+  (() => {
+    const pacing = computeFundingPacing(instrument(), NOW);
+    // 533,445 of 928,000 is 57.5% spent with 72% of the flight gone.
+    return (
+      pacing.status === "underpacing" &&
+      Math.round(pacing.shareSpent * 1000) === 575 &&
+      pacing.atRisk > 0 &&
+      pacing.atRisk < pacing.fundedAmount
+    );
+  })(),
+);
+check(
+  "a paused order reads as blocked, not as behind",
+  (() => {
+    const pacing = computeFundingPacing(
+      instrument({ entityStatus: "PAUSED", ableToFund: false, reasonsNotAbleToFund: ["PAUSED"], spendToDate: 0 }),
+      NOW,
+    );
+    // Leading with "behind" would send a rep to raise budgets on campaigns that cannot spend.
+    return (
+      pacing.status === "blocked" &&
+      pacing.blockedReason === "paused" &&
+      pacing.atRisk === 928_000
+    );
+  })(),
+);
+check(
+  "an order spending in line with its flight is left alone",
+  (() => {
+    const pacing = computeFundingPacing(instrument({ spendToDate: 670_000 }), NOW);
+    return pacing.status === "on-pace" && pacing.atRisk === 0;
+  })(),
+);
+check(
+  "an order that will exhaust its commitment early is ahead, not a problem to solve",
+  computeFundingPacing(instrument({ spendToDate: 900_000 }), NOW).status === "overpacing",
+);
+check(
+  "a closed flight reports what went unspent as final",
+  (() => {
+    const pacing = computeFundingPacing(
+      instrument({ endTime: "2026-10-01", spendToDate: 800_000 }),
+      NOW,
+    );
+    return pacing.status === "ended" && pacing.atRisk === 128_000;
+  })(),
+);
+check(
+  "an unfunded source offers no verdict rather than a flattering one",
+  computeFundingPacing(instrument({ fundedAmount: 0, spendToDate: 0 }), NOW).status === "unfunded",
 );
 
 console.log("== the setup checklist judges settings, not the advertiser ==");

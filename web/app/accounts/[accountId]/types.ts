@@ -3,6 +3,7 @@
  * own module so client code never imports a server route file.
  */
 import type { Totals } from "@/lib/x/stats";
+import type { FundingPacing } from "@/lib/x/funding";
 import type { CampaignPacing } from "@/lib/x/pacing";
 import type { SetupCheck } from "@/lib/x/setup-check";
 import type { TargetingSummary } from "@/lib/x/targeting";
@@ -62,6 +63,22 @@ export type FundingInstrumentRow = {
   creditLimit: number | null;
   fundedAmount: number | null;
   ableToFund: boolean;
+  /** `INSERTION_ORDER` or `CREDIT_CARD`. The two mean very different things to a CAM. */
+  type: string | null;
+  /** The insertion order number, which is what finance and the advertiser both quote. */
+  ioHeader: string | null;
+  entityStatus: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  /** X's own reasons, e.g. `["PAUSED"]`, rather than anything inferred from the status. */
+  reasonsNotAbleToFund: string[];
+  /** Campaigns drawing on this instrument in the selected window. */
+  campaigns: number;
+  /**
+   * Pacing against the instrument's own flight. Null when its spend history was not fetched —
+   * which is not the same as zero spend, so the panel must not render a null as "nothing spent".
+   */
+  pacing: FundingPacing | null;
 };
 
 export type PacingSummary = {

@@ -165,26 +165,99 @@ function lineItemObjects(campaign: DemoCampaign, timeZone: string) {
   }));
 }
 
+/**
+ * Three instruments, because one cannot show what the funding panel is for.
+ *
+ * Modelled on what a live account actually looks like: the insertion order the campaigns draw on,
+ * a second one holding committed budget that has never spent a penny, and an empty credit card.
+ * Novig has exactly this shape — $928,000 across paused orders at zero spend, beside a card
+ * described as "(no payment method has been set up yet)" that is nonetheless ACTIVE and able to
+ * fund. That card is why the panel filters on funded-and-in-flight rather than on status.
+ */
 function fundingInstruments(account: DemoAccount) {
+  const flight = instrumentFlight(account.timezone);
   return [
     {
       // Must match what the campaigns reference, or the currency cannot be resolved per campaign.
       id: fundingInstrumentId(account.id),
-      description: `${account.name} — Insertion Order`,
-      type: "CREDIT_LINE",
+      description: `${account.name} — ROS Media`,
+      type: "INSERTION_ORDER",
       currency: account.currency,
-      credit_limit_local_micro: 5_000_000_000_000,
+      credit_limit_local_micro: null,
       funded_amount_local_micro: 1_250_000_000_000,
       entity_status: "ACTIVE",
       able_to_fund: true,
+      reasons_not_able_to_fund: [],
+      io_header: "T3310041",
+      start_time: flight.start,
+      end_time: flight.end,
+      deleted: false,
+    },
+    {
+      /**
+       * Committed, in flight, and paused, so it cannot spend. The panel has to lead with the
+       * reason rather than with "underpacing", or a rep goes and raises budgets on campaigns that
+       * are not the problem.
+       */
+      id: `${fundingInstrumentId(account.id)}b`,
+      description: `${account.name} — Always On Reserve`,
+      type: "INSERTION_ORDER",
+      currency: account.currency,
+      credit_limit_local_micro: null,
+      funded_amount_local_micro: 420_000_000_000,
+      entity_status: "PAUSED",
+      able_to_fund: false,
+      reasons_not_able_to_fund: ["PAUSED"],
+      io_header: "T3310042",
+      start_time: flight.start,
+      end_time: flight.end,
+      deleted: false,
+    },
+    {
+      /** The noise. Active and able to fund, with nothing in it and no flight. */
+      id: `${fundingInstrumentId(account.id)}c`,
+      description: "(no payment method has been set up yet)",
+      type: "CREDIT_CARD",
+      currency: account.currency,
+      credit_limit_local_micro: 0,
+      funded_amount_local_micro: 0,
+      entity_status: "ACTIVE",
+      able_to_fund: true,
+      reasons_not_able_to_fund: [],
+      io_header: null,
+      start_time: flight.start,
+      end_time: null,
       deleted: false,
     },
   ];
 }
 
+/**
+ * A flight the demo sits two thirds of the way through, so the live order reads as behind rather
+ * than as finished or not started. Anchored to the generated calendar, not to the real clock.
+ *
+ * Both boundaries are the account's own day, because that is the shape X returns: a real order
+ * starts at `04:00:00Z` and ends at `04:59:59Z` on an Eastern account, being local midnight and
+ * the last second of the final local day. Generating plain `T00:00:00Z` instead would put the
+ * flight an evening early and the panel would render both dates a day short.
+ */
+function instrumentFlight(timeZone: string): { start: string; end: string } {
+  const day = 86_400_000;
+  const today = Date.parse(`${localDate(1, timeZone)}T00:00:00Z`);
+  const dayAt = (offset: number) =>
+    new Date(today + offset * day).toISOString().slice(0, 10);
+  return {
+    start: zonedInstant(dayAt(-40), 0, timeZone),
+    // One second short of the next local midnight, so the flight covers all of its final day.
+    end: new Date(Date.parse(zonedInstant(dayAt(21), 0, timeZone)) - 1_000)
+      .toISOString()
+      .replace(/\.\d{3}Z$/, "Z"),
+  };
+}
+
 /** Totals over a date range for one entity, used by both granularities. */
 function sumRange(
-  entity: "CAMPAIGN" | "LINE_ITEM" | "PROMOTED_TWEET",
+  entity: "CAMPAIGN" | "LINE_ITEM" | "PROMOTED_TWEET" | "FUNDING_INSTRUMENT",
   id: string,
   timeZone: string,
   dates: string[],
@@ -284,7 +357,8 @@ function statsResponse(path: string, query: Query) {
   const entity = (str(query, "entity") ?? "CAMPAIGN") as
     | "CAMPAIGN"
     | "LINE_ITEM"
-    | "PROMOTED_TWEET";
+    | "PROMOTED_TWEET"
+    | "FUNDING_INSTRUMENT";
   const ids = list(query, "entity_ids");
   const granularity = (str(query, "granularity") ?? "DAY") as "DAY" | "TOTAL";
   const groups = new Set(list(query, "metric_groups").map((group) => group.toUpperCase()));

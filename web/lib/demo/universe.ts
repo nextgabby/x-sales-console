@@ -743,7 +743,7 @@ export function campaignDayMetrics(
 
 /** Metrics for whichever entity type an id belongs to, so the stats endpoint stays generic. */
 export function entityDayMetrics(
-  entity: "CAMPAIGN" | "LINE_ITEM" | "PROMOTED_TWEET",
+  entity: "CAMPAIGN" | "LINE_ITEM" | "PROMOTED_TWEET" | "FUNDING_INSTRUMENT",
   id: string,
   timeZone: string,
   date: string,
@@ -751,6 +751,23 @@ export function entityDayMetrics(
   if (entity === "CAMPAIGN") {
     const campaign = campaignsById.get(id);
     return campaign ? campaignDayMetrics(campaign, timeZone, date) : null;
+  }
+  /**
+   * Summed from the campaigns drawing on it, which is what the real API reports too — verified on
+   * Novig, where an instrument's 7-day spend of 37,666.03 equalled its three campaigns exactly.
+   * An instrument nothing draws on returns a zero day rather than null, because an insertion order
+   * holding budget that has never spent is a real state the pacing panel has to be able to show.
+   */
+  if (entity === "FUNDING_INSTRUMENT") {
+    const funded = [...campaignsById.values()].filter(
+      (campaign) => campaign.fundingInstrumentId === id,
+    );
+    const total = emptyDay();
+    for (const campaign of funded) {
+      const day = campaignDayMetrics(campaign, timeZone, date);
+      if (day) addDay(total, day);
+    }
+    return total;
   }
   if (entity === "LINE_ITEM") {
     const item = lineItemsById.get(id);

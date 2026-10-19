@@ -25,6 +25,16 @@ export type FundingInstrument = {
   funded_amount_local_micro?: number | null;
   entity_status?: string;
   able_to_fund?: boolean;
+  /**
+   * The insertion order's own flight, which is not any campaign's flight. An IO routinely outlives
+   * the campaigns drawing on it, so its commitment has to be paced against these dates.
+   */
+  start_time?: string | null;
+  end_time?: string | null;
+  /** The insertion order number finance and the advertiser both quote, e.g. `T3331614`. */
+  io_header?: string | null;
+  /** X's own explanation, e.g. `["PAUSED"]`. Empty when `able_to_fund` is true. */
+  reasons_not_able_to_fund?: string[];
 };
 
 /**

@@ -933,6 +933,41 @@ open are kept.
 Grants lapse. The spy manager's "Recently viewed" is browsing history, not current access, so
 expect some entries to be rejected. A card whose access has since lapsed says so directly.
 
+## Leads and CPL, and why they are not here
+
+A rep asked for Leads and CPL for the Lead Gen product. The honest answer today is that the public
+API cannot produce them, and the reason is worth writing down so nobody re-derives it.
+
+**There is no lead metric.** `metric_groups=WEB_CONVERSION` returns 14 `conversion_*` figures and
+none of them is a lead. There is also no `LEAD` web event tag type: a live account's full default
+set is `LANDING_PAGE_VIEW, SESSION, DOWNLOAD, SIGN_UP, PURCHASE, ADDED_PAYMENT_INFO,
+CHECKOUT_INITIATED, ADD_TO_WISHLIST, ADD_TO_CART, SEARCH, CONTENT_VIEW, COMPLETE_REGISTRATION,
+PAGE_VIEW`. X's UI relabelled sign-up as "Lead", which is a rename, not a new event.
+
+**Lead Gen is not a distinct product on the wire.** Internally it is stored exactly like a Sales
+buy — `WEBSITE_CLICKS` with a conversion-optimized goal — and the only thing separating the two is
+an autocreated conversion event whose `initial_conversion_detail` is `lead_gen_form_submit`, bound
+to the line item. That field does not exist on the public web event tag object, which carries
+exactly twelve: `auto_created, click_window, deleted, embed_code, id, last_tracked_at, name,
+retargeting_enabled, status, type, view_through_window, website_tag_id`. Fetching a single tag adds
+nothing to that list. So a Lead Gen buy and a Sales buy are indistinguishable through this API, and
+any "CPL" computed from a shared event type like `conversion_sign_ups` would pool lead-form submits
+with every ordinary sign-up on the account. That number must not be shown to a CAM who might quote
+it to an advertiser.
+
+**`auto_created` cannot stand in for it.** It is `true` for all thirteen default events, so it
+identifies the standard set rather than anything lead-specific.
+
+**`segmentation_type=CONVERSION_TAGS` is real, and is the path if this ever becomes possible.** It
+appears in the segmentation enum and an async job accepts it at both `CAMPAIGN` and `LINE_ITEM`
+grain. Two constraints come with it: it refuses to be paired with anything but `WEB_CONVERSION`
+(`ENGAGEMENT,BILLING,WEB_CONVERSION` is rejected outright), and the synchronous endpoint silently
+ignores it — passing it there echoes `segmentation_type: null` and returns one unsegmented row. So
+per-tag conversions cannot ride along in the request the dashboard already makes; they need a
+separate async job. The segment's own shape is still unobserved, because no account reachable here
+has both conversion tags and spend: one has thirteen tags and no campaigns, the other has live
+campaigns and no tags.
+
 ## API behaviors worth knowing
 
 **Do not send `x-as-user` by default.** For an account you hold directly, adding the header fails

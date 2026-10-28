@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Badge, Sparkline, cx } from "@/components/ui";
+import { Badge, Sparkline } from "@/components/ui";
 import {
   formatCurrency,
   formatNumber,
@@ -14,6 +14,8 @@ import {
   isRankable,
   MIN_CLICKS_TO_RANK,
 } from "@/lib/x/creatives";
+import type { MetricSpec } from "./metrics";
+import type { Totals } from "@/lib/x/stats";
 import type { PromotedPostRow } from "./types";
 
 /** Rows shown before collapsing. Campaigns with 200 creatives are normal. */
@@ -22,11 +24,12 @@ const VISIBLE_LIMIT = 10;
 export function CreativeList({
   posts,
   currency,
-  hasVideo,
+  extras,
 }: {
   posts: PromotedPostRow[];
   currency: string | null;
-  hasVideo: boolean;
+  /** Metrics the campaign has turned on, such as CPI or video views. */
+  extras: MetricSpec[];
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showInactive, setShowInactive] = useState(false);
@@ -106,22 +109,18 @@ export function CreativeList({
               />
             </div>
 
-            <dl
-              className={cx(
-                "nums mt-3 grid gap-2 text-xs",
-                hasVideo ? "grid-cols-3 sm:grid-cols-6" : "grid-cols-4",
-              )}
-            >
+            <dl className="nums mt-3 grid grid-cols-4 gap-2 text-xs">
               <Cell label="Spend" value={formatCurrency(post.totals.spend, currency)} />
               <Cell label="Impr." value={formatNumber(post.totals.impressions)} />
               <Cell label="CTR" value={formatPercent(post.totals.ctr)} />
               <Cell label="CPM" value={formatUnitCost(post.totals.cpm, currency)} />
-              {hasVideo ? (
-                <>
-                  <Cell label="Views" value={formatNumber(post.totals.videoViews)} />
-                  <Cell label="View rate" value={formatPercent(post.totals.viewRate)} />
-                </>
-              ) : null}
+              {extras.map((spec) => (
+                <Cell
+                  key={spec.key}
+                  label={spec.label}
+                  value={formatMetric(spec, post.totals, currency)}
+                />
+              ))}
             </dl>
 
             <div className="mt-3 flex items-center gap-3 text-[11px]">
@@ -175,6 +174,12 @@ export function CreativeList({
       </div>
     </section>
   );
+}
+
+function formatMetric(spec: MetricSpec, totals: Totals, currency: string | null): string {
+  const value = spec.value(totals);
+  if (spec.direction === "lower" && value <= 0) return "—";
+  return spec.format(value, currency);
 }
 
 function Cell({ label, value }: { label: string; value: string }) {

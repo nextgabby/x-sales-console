@@ -17,9 +17,12 @@ import { AudiencePanel } from "./audience-panel";
 import { InsightsPanel } from "./insights-panel";
 import { LabelControl } from "./label-control";
 import { PlatformPanel } from "./platform-panel";
+import { MetricChoices } from "./kpi-tiles";
+import { chosenOptionalMetrics, type MetricSpec } from "./metrics";
 import { SetupPanel } from "./setup-panel";
 import { TargetingPanel } from "./targeting-panel";
 import type { CampaignLabelKind } from "@/lib/store/types";
+import type { Totals } from "@/lib/x/stats";
 import type { CampaignDetailPayload } from "./types";
 
 const CREATIVE_SUGGESTIONS = [
@@ -44,6 +47,8 @@ export function CampaignDrawer({
   timezone,
   label,
   objectiveSiblings,
+  optionalKeys,
+  onToggleOptional,
   onClose,
 }: {
   accountId: string;
@@ -59,6 +64,8 @@ export function CampaignDrawer({
   label: CampaignLabelKind | null;
   /** Campaigns on the same objective, for the setup checklist. See the dashboard's own comment. */
   objectiveSiblings: number | null;
+  optionalKeys: string[];
+  onToggleOptional: (key: string) => void;
   onClose: () => void;
 }) {
   const { data, isLoading, isError, error } = useQuery({
@@ -137,40 +144,85 @@ export function CampaignDrawer({
           ) : isError ? (
             <Callout tone="negative">{(error as Error).message}</Callout>
           ) : data ? (
-            <>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <Metric
-                  label="Spend"
-                  value={formatCurrency(data.totals.spend, data.currency)}
-                />
-                <Metric
-                  label="Impressions"
-                  value={formatNumber(data.totals.impressions)}
-                />
-                <Metric label="CTR" value={formatPercent(data.totals.ctr)} />
-                <Metric
-                  label="CPM"
-                  value={formatUnitCost(data.totals.cpm, data.currency)}
-                />
-              </div>
+            <DrawerBody
+              data={data}
+              accountId={accountId}
+              campaignId={campaignId}
+              asUser={asUser}
+              days={days}
+              timezone={timezone}
+              label={label}
+              optionalKeys={optionalKeys}
+              onToggleOptional={onToggleOptional}
+            />
+          ) : null}
+        </div>
+      </aside>
+    </div>
+  );
+}
 
-              {/*
-                High in the drawer on purpose. A rep opens a campaign from a red "Behind" row
-                precisely to find out whether that verdict is fair, so the control that answers it
-                should not be below four panels of delivery analysis.
-              */}
-              <LabelControl
-                accountId={accountId}
-                campaignId={campaignId}
-                asUser={asUser}
-                label={label}
-              />
+function DrawerBody({
+  data,
+  accountId,
+  campaignId,
+  asUser,
+  days,
+  timezone,
+  label,
+  optionalKeys,
+  onToggleOptional,
+}: {
+  data: CampaignDetailPayload;
+  accountId: string;
+  campaignId: string;
+  asUser: string | null;
+  days: number;
+  timezone: string;
+  label: CampaignLabelKind | null;
+  optionalKeys: string[];
+  onToggleOptional: (key: string) => void;
+}) {
+  const extras = chosenOptionalMetrics(optionalKeys);
 
-              <section>
-                <h3 className="text-sm font-semibold text-ink">
-                  Line items{" "}
-                  <span className="font-normal text-muted">({data.lineItems.length})</span>
-                </h3>
+  return (
+    <>
+      <MetricChoices
+        totals={data.totals}
+        optionalKeys={optionalKeys}
+        onToggleOptional={onToggleOptional}
+      />
+
+      <div className="grid grid-cols-2 gap-3">
+        <Metric label="Spend" value={formatCurrency(data.totals.spend, data.currency)} />
+        <Metric label="Impressions" value={formatNumber(data.totals.impressions)} />
+        <Metric label="CTR" value={formatPercent(data.totals.ctr)} />
+        <Metric label="CPM" value={formatUnitCost(data.totals.cpm, data.currency)} />
+        {extras.map((spec) => (
+          <Metric
+            key={spec.key}
+            label={spec.label}
+            value={formatMetric(spec, data.totals, data.currency)}
+          />
+        ))}
+      </div>
+
+      {/*
+        High in the drawer on purpose. A rep opens a campaign from a red "Behind" row
+        precisely to find out whether that verdict is fair, so the control that answers it
+        should not be below four panels of delivery analysis.
+      */}
+      <LabelControl
+        accountId={accountId}
+        campaignId={campaignId}
+        asUser={asUser}
+        label={label}
+      />
+
+      <section>
+        <h3 className="text-sm font-semibold text-ink">
+          Line items <span className="font-normal text-muted">({data.lineItems.length})</span>
+        </h3>
                 <div className="mt-3 space-y-2">
                   {data.lineItems.map((item) => (
                     <div
@@ -216,6 +268,13 @@ export function CampaignDrawer({
                           label="CPM"
                           value={formatUnitCost(item.totals.cpm, data.currency)}
                         />
+                        {extras.map((spec) => (
+                          <Cell
+                            key={spec.key}
+                            label={spec.label}
+                            value={formatMetric(spec, item.totals, data.currency)}
+                          />
+                        ))}
                       </dl>
                     </div>
                   ))}
@@ -263,22 +322,22 @@ export function CampaignDrawer({
                 then outcome is the order a rep walks an advertiser through, and the disagreement
                 between the two is usually the reason for the call.
               */}
-              <TargetingPanel targeting={data.targeting} />
-
-              {/* Nothing to advise on when no line item carries any criteria; the panel says so. */}
-              {data.targeting.status === "ok" ? (
-                <AskGrok
-                  endpoint={`/api/accounts/${accountId}/campaigns/${campaignId}/targeting-summary`}
-                  body={{ asUser, days, timezone }}
-                  title="Ask Grok about this targeting"
-                  description="Grounded in the criteria above, which are read from the Ads API rather than inferred."
-                  primaryLabel="Review targeting"
-                  emptyState="Nothing generated yet. Review the targeting, or ask whether it fits the objective."
-                  suggestions={TARGETING_SUGGESTIONS}
-                  askPlaceholder="Ask about this targeting…"
-                  unconfiguredHint="Add your own xAI API key to review this targeting and get recommendations."
-                />
-              ) : null}
+              <TargetingPanel targeting={data.targeting}>
+                {/* Nothing to advise on when no line item carries any criteria; the panel says so. */}
+                {data.targeting.status === "ok" ? (
+                  <AskGrok
+                    endpoint={`/api/accounts/${accountId}/campaigns/${campaignId}/targeting-summary`}
+                    body={{ asUser, days, timezone }}
+                    title="Ask Grok about this targeting"
+                    description="Grounded in the criteria above, which are read from the Ads API rather than inferred."
+                    primaryLabel="Review targeting"
+                    emptyState="Nothing generated yet. Review the targeting, or ask whether it fits the objective."
+                    suggestions={TARGETING_SUGGESTIONS}
+                    askPlaceholder="Ask about this targeting…"
+                    unconfiguredHint="Add your own xAI API key to review this targeting and get recommendations."
+                  />
+                ) : null}
+              </TargetingPanel>
 
               <AudiencePanel
                 accountId={accountId}
@@ -293,7 +352,7 @@ export function CampaignDrawer({
               <CreativeList
                 posts={data.promotedPosts}
                 currency={data.currency}
-                hasVideo={data.totals.videoViews > 0}
+                extras={extras}
               />
 
               {/* Only offered where something delivered; there is nothing to rank otherwise. */}
@@ -314,12 +373,14 @@ export function CampaignDrawer({
               {data.warnings.length > 0 ? (
                 <Callout tone="warn">{data.warnings.join(" · ")}</Callout>
               ) : null}
-            </>
-          ) : null}
-        </div>
-      </aside>
-    </div>
+    </>
   );
+}
+
+function formatMetric(spec: MetricSpec, totals: Totals, currency: string | null): string {
+  const value = spec.value(totals);
+  if (spec.direction === "lower" && value <= 0) return "—";
+  return spec.format(value, currency);
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

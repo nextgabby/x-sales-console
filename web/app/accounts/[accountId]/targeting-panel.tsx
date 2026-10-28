@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, type ReactNode } from "react";
+
 import { Badge, Callout } from "@/components/ui";
 import type { TargetingGroup, TargetingSummary, TargetingValue } from "@/lib/x/targeting";
 
@@ -11,20 +13,42 @@ import type { TargetingGroup, TargetingSummary, TargetingValue } from "@/lib/x/t
  * here is inferred — every value is a criterion the advertiser set, and the signals underneath are
  * arithmetic over them rather than advice, which is left to the Grok panel below.
  */
-export function TargetingPanel({ targeting }: { targeting: TargetingSummary }) {
+export function TargetingPanel({
+  targeting,
+  children,
+}: {
+  targeting: TargetingSummary;
+  /** Shown with the criteria, so it stays hidden until the section is opened. */
+  children?: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+
   return (
     <section>
-      <header>
-        <h3 className="text-sm font-semibold text-ink">Targeting</h3>
-        <p className="mt-0.5 text-xs text-muted">
-          What the campaign is set to reach, declared by the advertiser rather than inferred
-          from delivery.
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-ink">Targeting</h3>
+          <p className="mt-0.5 text-xs text-muted">
+            What the campaign is set to reach, declared by the advertiser rather than inferred
+            from delivery.
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+          className="shrink-0 text-xs font-semibold text-muted transition-colors hover:text-ink"
+        >
+          {open ? "Hide" : "Show"}
+        </button>
       </header>
 
-      <div className="mt-3">
-        <Body targeting={targeting} />
-      </div>
+      {open ? (
+        <div className="mt-3 space-y-6">
+          <Body targeting={targeting} />
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }

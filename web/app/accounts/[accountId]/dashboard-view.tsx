@@ -196,6 +196,21 @@ export function DashboardView({ accountId }: { accountId: string }) {
     ids: visibleSelected.join(","),
   }).toString()}`;
 
+  const tileTotals = view?.totals ?? data?.totals ?? null;
+  const optionalKeys = tileTotals
+    ? optionalKeysFromParam(searchParams.get("kpi"), tileTotals, objective)
+    : [];
+  const onToggleOptional = (key: string) => {
+    if (!tileTotals) return;
+    const defaults = defaultOptionalKeys(tileTotals, objective);
+    const next = optionalKeys.includes(key)
+      ? optionalKeys.filter((entry) => entry !== key)
+      : [...optionalKeys, key];
+    const same =
+      next.length === defaults.length && next.every((entry) => defaults.includes(entry));
+    setQuery({ kpi: same ? null : next.join(",") });
+  };
+
   const metrics: TrendMetric[] = view
     ? [
         { key: "spend", label: "Spend", values: view.spendSeries, kind: "currency" },
@@ -334,22 +349,8 @@ export function DashboardView({ accountId }: { accountId: string }) {
             spendSeries={view?.spendSeries ?? data.spendSeries}
             rangeDays={range}
             comparable={baseline === null && !filtering}
-            optionalKeys={optionalKeysFromParam(
-              searchParams.get("kpi"),
-              view?.totals ?? data.totals,
-              objective,
-            )}
-            onToggleOptional={(key) => {
-              const totals = view?.totals ?? data.totals;
-              const defaults = defaultOptionalKeys(totals, objective);
-              const current = optionalKeysFromParam(searchParams.get("kpi"), totals, objective);
-              const next = current.includes(key)
-                ? current.filter((entry) => entry !== key)
-                : [...current, key];
-              const same =
-                next.length === defaults.length && next.every((entry) => defaults.includes(entry));
-              setQuery({ kpi: same ? null : next.join(",") });
-            }}
+            optionalKeys={optionalKeys}
+            onToggleOptional={onToggleOptional}
           />
 
           {filtering ? (
@@ -455,6 +456,8 @@ export function DashboardView({ accountId }: { accountId: string }) {
            * the checklist's "1 campaign per objective" line, while this list already holds it.
            */
           objectiveSiblings={objectiveSiblings(data.campaigns, openCampaign)}
+          optionalKeys={optionalKeys}
+          onToggleOptional={onToggleOptional}
           onClose={() => setOpenCampaign(null)}
         />
       ) : null}

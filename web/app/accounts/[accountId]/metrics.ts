@@ -231,6 +231,12 @@ export function defaultOptionalKeys(totals: Totals, objective: string | null): s
   ).map((spec) => spec.key);
 }
 
+/** Optional metrics the rep has turned on, in display order. */
+export function chosenOptionalMetrics(keys: string[]): MetricSpec[] {
+  const chosen = new Set(keys);
+  return METRICS.filter((spec) => spec.when && chosen.has(spec.key));
+}
+
 /** `null` means the rep has not chosen, so the objective default applies. */
 export function optionalKeysFromParam(
   value: string | null,

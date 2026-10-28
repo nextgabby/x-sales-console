@@ -5,6 +5,49 @@ import { formatDelta } from "@/lib/format";
 import type { Totals } from "@/lib/x/stats";
 import { METRICS, metricApplies } from "./metrics";
 
+/** The optional metrics a rep can turn on. Core tiles stay on without a chip. */
+export function MetricChoices({
+  totals,
+  optionalKeys,
+  onToggleOptional,
+}: {
+  totals: Totals;
+  optionalKeys: string[];
+  onToggleOptional: (key: string) => void;
+}) {
+  const chosen = new Set(optionalKeys);
+  const choices = METRICS.filter(
+    (spec) => spec.when && (metricApplies(spec, totals) || chosen.has(spec.key)),
+  );
+  if (choices.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs font-semibold text-muted">Also show</span>
+      {choices.map((spec) => {
+        const on = chosen.has(spec.key);
+        return (
+          <button
+            key={spec.key}
+            type="button"
+            aria-pressed={on}
+            title={spec.hint ?? spec.label}
+            onClick={() => onToggleOptional(spec.key)}
+            className={cx(
+              "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+              on
+                ? "border-accent bg-accent text-white"
+                : "border-border bg-surface text-muted hover:text-ink",
+            )}
+          >
+            {spec.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function KpiTiles({
   totals,
   previousTotals,
@@ -32,37 +75,14 @@ export function KpiTiles({
 }) {
   const chosen = new Set(optionalKeys);
   const specs = METRICS.filter((spec) => !spec.when || chosen.has(spec.key));
-  const choices = METRICS.filter(
-    (spec) => spec.when && (metricApplies(spec, totals) || chosen.has(spec.key)),
-  );
 
   return (
     <div className="space-y-3">
-      {choices.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-muted">Also show</span>
-          {choices.map((spec) => {
-            const on = chosen.has(spec.key);
-            return (
-              <button
-                key={spec.key}
-                type="button"
-                aria-pressed={on}
-                title={spec.hint ?? spec.label}
-                onClick={() => onToggleOptional(spec.key)}
-                className={cx(
-                  "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-                  on
-                    ? "border-accent bg-accent text-white"
-                    : "border-border bg-surface text-muted hover:text-ink",
-                )}
-              >
-                {spec.label}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      <MetricChoices
+        totals={totals}
+        optionalKeys={optionalKeys}
+        onToggleOptional={onToggleOptional}
+      />
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
         {specs.map((spec) => {

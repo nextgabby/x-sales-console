@@ -355,31 +355,11 @@ export function DashboardView({ accountId }: { accountId: string }) {
             </p>
           ) : null}
 
-          {/* Ahead of the charts: this is the part with something to do about it. */}
-          <PacingPanel
-            summary={view?.pacing ?? data.pacing}
-            campaigns={view?.campaigns ?? data.campaigns}
-            currency={data.account.currency}
-          />
-
           {/*
-            Directly below campaign pacing, because the two answer the same question at different
-            levels and a rep reading one will want the other: campaigns can each pace fine while
-            the insertion order funding them falls short.
+            The filtered list is the thing the controls just changed, so it sits above the
+            account-level funding sources. Those do not follow objective or status, and a long
+            funding list was hiding the one campaign the filter had left.
           */}
-          <FundingPanel
-            instruments={data.fundingInstruments}
-            currency={data.account.currency}
-            timeZone={data.account.timezone}
-          />
-
-          <TrendChart
-            dates={data.range.dates}
-            metrics={metrics}
-            currency={data.account.currency}
-            provisionalDays={data.range.provisionalDays}
-          />
-
           <CampaignTable
             campaigns={view?.campaigns ?? data.campaigns}
             currency={data.account.currency}
@@ -393,6 +373,25 @@ export function DashboardView({ accountId }: { accountId: string }) {
             takeovers={data.takeovers}
             currency={data.account.currency}
             onChange={setTakeovers}
+          />
+
+          <PacingPanel
+            summary={view?.pacing ?? data.pacing}
+            campaigns={view?.campaigns ?? data.campaigns}
+            currency={data.account.currency}
+          />
+
+          <TrendChart
+            dates={data.range.dates}
+            metrics={metrics}
+            currency={data.account.currency}
+            provisionalDays={data.range.provisionalDays}
+          />
+
+          <FundingPanel
+            instruments={data.fundingInstruments}
+            currency={data.account.currency}
+            timeZone={data.account.timezone}
           />
         </div>
       ) : null}

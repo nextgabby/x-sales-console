@@ -12,6 +12,7 @@ import { CampaignTable } from "./campaign-table";
 import { KpiTiles } from "./kpi-tiles";
 import { FundingPanel } from "./funding-panel";
 import { PacingPanel } from "./pacing-panel";
+import { TakeoverWrap } from "./takeover-wrap";
 import { TrendChart, type TrendMetric } from "./trend-chart";
 import {
   combineTotals,
@@ -394,6 +395,8 @@ export function DashboardView({ accountId }: { accountId: string }) {
             currency={data.account.currency}
             onChange={setTakeovers}
           />
+
+          <TakeoverWrap rows={data.takeovers.rows} />
 
           <PacingPanel
             summary={view?.pacing ?? data.pacing}

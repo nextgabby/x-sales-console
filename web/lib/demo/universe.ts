@@ -409,7 +409,7 @@ const HARBORLINE: CampaignSpec[] = [
    * above is the point — the same shortfall, opposite advice.
    */
   { key: "city-video", name: "City Breaks — Video", objective: "VIDEO_VIEWS", startDaysAgo: 30, endDaysAgo: -14, totalBudgetMultiple: 1.4, capUse: 0.34, dailyImpressions: 260_000, cpm: 4.4, ctr: 0.0051, viewRate: 0.41 },
-  { key: "takeover", name: "Takeover", objective: "REACH", startDaysAgo: 30, endDaysAgo: 29, describable: false, dailyImpressions: 21_000_000, cpm: 2.2, ctr: 0.0009 },
+  { key: "takeover", name: "Takeover", objective: "REACH", startDaysAgo: 30, endDaysAgo: 29, describable: false, dailyImpressions: 21_000_000, cpm: 2.2, ctr: 0.0009, viewRate: 0.043 },
   /**
    * A Trend Genius buy, which only delivers on days a matching trend actually fires — modelled on
    * the live one that prompted the feature, where 19 of 28 possible days delivered across four

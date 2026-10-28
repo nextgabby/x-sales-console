@@ -310,6 +310,14 @@ export async function buildDashboard(options: {
       (id) => objectiveByCampaign.get(id) ?? null,
     ),
   );
+  /**
+   * A takeover has no objective, so the video group would otherwise be skipped on an account that
+   * is not already buying views. The wrap is the quartile counts, and they come back as nothing
+   * unless this request asks for them.
+   */
+  const groups = metricGroups.split(",").filter((group) => group.length > 0);
+  if (takeoverIds.length > 0 && !groups.includes("VIDEO")) groups.push("VIDEO");
+  const requestedGroups = groups.join(",");
 
   const [current, previous] = await Promise.all([
     fetchDailyStats({
@@ -319,7 +327,7 @@ export async function buildDashboard(options: {
       entity: "CAMPAIGN",
       entityIds: statsIds,
       range,
-      metricGroups,
+      metricGroups: requestedGroups,
       actor,
     }),
     skipComparisons
@@ -336,7 +344,7 @@ export async function buildDashboard(options: {
           entity: "CAMPAIGN",
           entityIds: previousStatsIds,
           range: previousRange,
-          metricGroups,
+          metricGroups: requestedGroups,
           actor,
         }),
   ]);
@@ -610,11 +618,11 @@ export async function buildDashboard(options: {
       };
     });
 
-  for (const id of includeTakeovers ? takeoverIds : []) {
+  const takeoverRows: CampaignRow[] = takeoverIds.map((id) => {
     const series = currentSeries[id];
     const spend = series ? dailySpend(series) : emptySpend();
     const charted = series ? chartSeries(series) : undefined;
-    rows.push({
+    return {
       id,
       // Dated, because a takeover is a day rather than an ongoing campaign, and the API gives no name.
       name: takeoverName(spend, charted?.impressions ?? emptySpend(), range.dates),
@@ -635,16 +643,20 @@ export async function buildDashboard(options: {
       dormant: false,
       retired: false,
       takeover: true,
-    });
-  }
+    };
+  });
 
-  // Two components of the same day buy produce the same date label, and identical names in a table
-  // the rep cannot click into leave no way to tell the rows apart.
-  const nameCounts = new Map<string, number>();
-  for (const row of rows) nameCounts.set(row.name, (nameCounts.get(row.name) ?? 0) + 1);
-  for (const row of rows) {
-    if (row.takeover && (nameCounts.get(row.name) ?? 0) > 1) row.name = `${row.name} · ${row.id}`;
+  // Two components of the same day buy produce the same date label, and identical names leave no
+  // way to tell the cards apart. The rep cannot open one of these.
+  const takeoverNameCounts = new Map<string, number>();
+  for (const row of takeoverRows) {
+    takeoverNameCounts.set(row.name, (takeoverNameCounts.get(row.name) ?? 0) + 1);
   }
+  for (const row of takeoverRows) {
+    if ((takeoverNameCounts.get(row.name) ?? 0) > 1) row.name = `${row.name} · ${row.id}`;
+  }
+  takeoverRows.sort((a, b) => b.totals.impressions - a.totals.impressions);
+  if (includeTakeovers) rows.push(...takeoverRows);
 
   rows.sort((a, b) => b.totals.spend - a.totals.spend);
 
@@ -707,6 +719,8 @@ export async function buildDashboard(options: {
       spend: takeoverTotals.spend,
       impressions: takeoverTotals.impressions,
       included: includeTakeovers,
+      // Always attached, so the wrap can show the day without folding it into auction totals.
+      rows: takeoverRows,
     },
     partial,
     fundingInstruments: fundingInstruments.map((instrument) => {

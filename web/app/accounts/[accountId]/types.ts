@@ -117,13 +117,15 @@ export type DashboardPayload = {
   pacing: PacingSummary;
   /**
    * Takeover spend in this window. Reported whether or not it is included, so the rep can see it
-   * exists; `totals` and `campaigns` only contain it when `included` is true.
+   * exists; `totals` and `campaigns` only contain it when `included` is true. `rows` is always
+   * present so the wrap can list each day on its own.
    */
   takeovers: {
     count: number;
     spend: number;
     impressions: number;
     included: boolean;
+    rows: CampaignRow[];
   };
   /** True when some stats requests failed, so totals understate reality. */
   partial: boolean;

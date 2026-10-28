@@ -2,7 +2,7 @@
 
 import { Badge, cx } from "@/components/ui";
 import { formatDelta } from "@/lib/format";
-import { bestIndex, METRICS, SERIES_COLORS } from "../metrics";
+import { bestIndex, METRICS, metricApplies, SERIES_COLORS } from "../metrics";
 import type { CampaignRow } from "../types";
 
 export function CompareTable({
@@ -16,8 +16,9 @@ export function CompareTable({
   baselineId: string;
   onBaselineChange: (id: string) => void;
 }) {
-  const hasVideo = campaigns.some((campaign) => campaign.totals.videoViews > 0);
-  const specs = METRICS.filter((spec) => !spec.video || hasVideo);
+  const specs = METRICS.filter((spec) =>
+    campaigns.some((campaign) => metricApplies(spec, campaign.totals)),
+  );
   const baselineIndex = Math.max(
     0,
     campaigns.findIndex((campaign) => campaign.id === baselineId),

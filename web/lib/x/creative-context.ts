@@ -6,7 +6,7 @@ import type {
   CampaignDetailPayload,
   PromotedPostRow,
 } from "@/app/accounts/[accountId]/types";
-import { METRICS, type MetricSpec } from "@/app/accounts/[accountId]/metrics";
+import { METRICS, metricApplies, type MetricSpec } from "@/app/accounts/[accountId]/metrics";
 
 /**
  * Creative-level context for Grok. Same principle as the compare prompt — pre-aggregated, display
@@ -100,11 +100,10 @@ function creativeBlock(options: {
   post: PromotedPostRow;
   index: number;
   currency: string | null;
-  hasVideo: boolean;
   ranks: Map<string, Map<string, Ranked>>;
   duplicateOf: string | null;
 }): string {
-  const { post, index, currency, hasVideo, ranks, duplicateOf } = options;
+  const { post, index, currency, ranks, duplicateOf } = options;
   const rankable = isRankable(post);
 
   const lines = [
@@ -130,7 +129,7 @@ function creativeBlock(options: {
   }
 
   for (const spec of METRICS) {
-    if (spec.video && !hasVideo) continue;
+    if (!metricApplies(spec, post.totals)) continue;
     const value = spec.format(spec.value(post.totals), currency);
     const position = rankable ? ranks.get(spec.key)?.get(post.id) : undefined;
     lines.push(
@@ -154,12 +153,10 @@ export function buildCreativePrompt(options: {
   const delivered = posts.filter((post) => post.totals.impressions > 0);
   const rankable = delivered.filter(isRankable);
   const selected = selectForPrompt(posts);
-  const hasVideo = detail.totals.videoViews > 0;
-
   const ranks = new Map<string, Map<string, Ranked>>();
   for (const spec of METRICS) {
     if (!RANKED_KEYS.has(spec.key)) continue;
-    if (spec.video && !hasVideo) continue;
+    if (!rankable.some((post) => metricApplies(spec, post.totals))) continue;
     ranks.set(spec.key, rankBy(rankable, spec));
   }
 
@@ -199,7 +196,7 @@ export function buildCreativePrompt(options: {
 
   const metricNotes = [
     "Metric definitions: CTR = clicks / impressions. Engagement rate = engagements / impressions.",
-    "CPM = cost per 1,000 impressions. CPE = cost per engagement. CPC = cost per click. CPV = cost per video view.",
+    "CPM = cost per 1,000 impressions. CPE = cost per engagement. CPC = cost per click. CPV = cost per video view. CPI = cost per install.",
     "View rate = video views / impressions. Completions = views that reached 100%.",
     "For CPM, CPE, CPC and CPV, lower is better. Spend itself is neither good nor bad.",
     "Rank 1 is always the best on that metric, whichever direction is better.",
@@ -215,7 +212,6 @@ export function buildCreativePrompt(options: {
           post,
           index: index + 1,
           currency,
-          hasVideo,
           ranks,
           duplicateOf: duplicateOf.get(post.id) ?? null,
         }),

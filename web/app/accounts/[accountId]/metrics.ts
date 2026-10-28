@@ -18,8 +18,11 @@ export type MetricSpec = {
   value: (totals: Totals) => number;
   format: (value: number, currency: string | null) => string;
   direction: MetricDirection;
-  /** Only shown when the campaigns being compared produced video metrics. */
-  video?: boolean;
+  /**
+   * Omitted from the default tiles until the account actually produced that result, or the rep
+   * asks for it. Video used to be the only case; cost per install is the same kind of choice.
+   */
+  when?: "video" | "install" | "follow" | "reengage";
   hint?: string;
 };
 
@@ -93,12 +96,64 @@ export const METRICS: MetricSpec[] = [
     hint: "Cost per click",
   },
   {
+    key: "installs",
+    label: "Installs",
+    value: (t) => t.installs,
+    format: (v) => formatNumber(v),
+    direction: "higher",
+    when: "install",
+    hint: "App installs, post-view plus post-engagement",
+  },
+  {
+    key: "costPerInstall",
+    label: "CPI",
+    value: (t) => t.costPerInstall,
+    format: (v, c) => formatUnitCost(v, c),
+    direction: "lower",
+    when: "install",
+    hint: "Cost per install",
+  },
+  {
+    key: "follows",
+    label: "Follows",
+    value: (t) => t.follows,
+    format: (v) => formatNumber(v),
+    direction: "higher",
+    when: "follow",
+  },
+  {
+    key: "cpf",
+    label: "CPF",
+    value: (t) => t.cpf,
+    format: (v, c) => formatUnitCost(v, c),
+    direction: "lower",
+    when: "follow",
+    hint: "Cost per follow",
+  },
+  {
+    key: "reEngages",
+    label: "Re-engages",
+    value: (t) => t.reEngages,
+    format: (v) => formatNumber(v),
+    direction: "higher",
+    when: "reengage",
+  },
+  {
+    key: "costPerReEngage",
+    label: "CPRE",
+    value: (t) => t.costPerReEngage,
+    format: (v, c) => formatUnitCost(v, c),
+    direction: "lower",
+    when: "reengage",
+    hint: "Cost per re-engagement",
+  },
+  {
     key: "videoViews",
     label: "Video views",
     value: (t) => t.videoViews,
     format: (v) => formatNumber(v),
     direction: "higher",
-    video: true,
+    when: "video",
   },
   {
     key: "viewRate",
@@ -106,7 +161,7 @@ export const METRICS: MetricSpec[] = [
     value: (t) => t.viewRate,
     format: (v) => formatPercent(v),
     direction: "higher",
-    video: true,
+    when: "video",
     hint: "Views ÷ impressions",
   },
   {
@@ -115,7 +170,7 @@ export const METRICS: MetricSpec[] = [
     value: (t) => t.cpv,
     format: (v, c) => formatUnitCost(v, c),
     direction: "lower",
-    video: true,
+    when: "video",
     hint: "Cost per view",
   },
   {
@@ -124,10 +179,71 @@ export const METRICS: MetricSpec[] = [
     value: (t) => t.videoViews100,
     format: (v) => formatNumber(v),
     direction: "higher",
-    video: true,
+    when: "video",
     hint: "Reached 100% of the video",
   },
 ];
+
+/** Whether this metric has a denominator on these totals. A zero tile is not a result. */
+export function metricApplies(spec: MetricSpec, totals: Totals): boolean {
+  switch (spec.when) {
+    case undefined:
+      return true;
+    case "video":
+      return totals.videoViews > 0;
+    case "install":
+      return totals.installs > 0;
+    case "follow":
+      return totals.follows > 0;
+    case "reengage":
+      return totals.reEngages > 0;
+    default: {
+      const exhaustive: never = spec.when;
+      return exhaustive;
+    }
+  }
+}
+
+/**
+ * Extra tiles for the objective on screen. App installs lead with cost per install rather than
+ * cost per view; with no objective selected, video tiles stay up when the account has views,
+ * which is what the page did before the tiles could be changed.
+ */
+const OBJECTIVE_TILES: Record<string, NonNullable<MetricSpec["when"]>[]> = {
+  APP_INSTALLS: ["install"],
+  APP_ENGAGEMENTS: ["reengage"],
+  APP_RE_ENGAGEMENTS: ["reengage"],
+  FOLLOWERS: ["follow"],
+  VIDEO_VIEWS: ["video"],
+  PREROLL_VIEWS: ["video"],
+};
+
+export function defaultOptionalKeys(totals: Totals, objective: string | null): string[] {
+  const groups = new Set<NonNullable<MetricSpec["when"]>>();
+  const named = objective ? OBJECTIVE_TILES[objective] : undefined;
+  if (named) {
+    for (const group of named) groups.add(group);
+  } else if (totals.videoViews > 0) {
+    groups.add("video");
+  }
+  return METRICS.filter(
+    (spec) => spec.when && groups.has(spec.when) && metricApplies(spec, totals),
+  ).map((spec) => spec.key);
+}
+
+/** `null` means the rep has not chosen, so the objective default applies. */
+export function optionalKeysFromParam(
+  value: string | null,
+  totals: Totals,
+  objective: string | null,
+): string[] {
+  if (value === null) return defaultOptionalKeys(totals, objective);
+  const known = new Set(METRICS.filter((spec) => spec.when).map((spec) => spec.key));
+  return value
+    .split(",")
+    .map((key) => key.trim())
+    .filter((key) => known.has(key));
+}
 
 /** Distinct enough to tell apart on a line chart and on a dark background. */
 export const SERIES_COLORS = [

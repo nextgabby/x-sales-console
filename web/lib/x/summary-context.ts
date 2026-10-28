@@ -1,7 +1,7 @@
 import { formatCurrency } from "../format";
 import type { ChatMessage } from "../grok";
 import type { CampaignRow, DashboardPayload } from "@/app/accounts/[accountId]/types";
-import { METRICS } from "@/app/accounts/[accountId]/metrics";
+import { METRICS, metricApplies } from "@/app/accounts/[accountId]/metrics";
 
 /**
  * The model receives pre-aggregated numbers, never raw API payloads. Two reasons: raw
@@ -181,9 +181,8 @@ function campaignBlock(campaign: CampaignRow, currency: string | null, index: nu
   const pacingLine = describePacing(campaign.pacing, currency);
   if (pacingLine) lines.push(`   pacing: ${pacingLine}`);
 
-  const hasVideo = campaign.totals.videoViews > 0;
   for (const spec of METRICS) {
-    if (spec.video && !hasVideo) continue;
+    if (!metricApplies(spec, campaign.totals)) continue;
     lines.push(`   ${spec.label}: ${formatted(spec, campaign.totals, currency)}`);
   }
 
@@ -238,7 +237,7 @@ export function buildComparePrompt(options: {
 
   const metricNotes = [
     "Metric definitions: CTR = clicks / impressions. Engagement rate = engagements / impressions.",
-    "CPM = cost per 1,000 impressions. CPE = cost per engagement. CPC = cost per click. CPV = cost per video view.",
+    "CPM = cost per 1,000 impressions. CPE = cost per engagement. CPC = cost per click. CPV = cost per video view. CPI = cost per install.",
     "View rate = video views / impressions. Completions = views that reached 100%.",
     "For CPM, CPE, CPC and CPV, lower is better. Spend itself is neither good nor bad.",
     "Impressions are delivery counts, not unique people; do not describe them as reach.",

@@ -25,6 +25,10 @@ import {
   sumDaily,
   type StatusFilter,
 } from "./filters";
+import {
+  defaultOptionalKeys,
+  optionalKeysFromParam,
+} from "./metrics";
 import type { CampaignRow, DashboardPayload } from "./types";
 
 const RANGES = [7, 14, 30, 90];
@@ -329,6 +333,22 @@ export function DashboardView({ accountId }: { accountId: string }) {
             spendSeries={view?.spendSeries ?? data.spendSeries}
             rangeDays={range}
             comparable={baseline === null && !filtering}
+            optionalKeys={optionalKeysFromParam(
+              searchParams.get("kpi"),
+              view?.totals ?? data.totals,
+              objective,
+            )}
+            onToggleOptional={(key) => {
+              const totals = view?.totals ?? data.totals;
+              const defaults = defaultOptionalKeys(totals, objective);
+              const current = optionalKeysFromParam(searchParams.get("kpi"), totals, objective);
+              const next = current.includes(key)
+                ? current.filter((entry) => entry !== key)
+                : [...current, key];
+              const same =
+                next.length === defaults.length && next.every((entry) => defaults.includes(entry));
+              setQuery({ kpi: same ? null : next.join(",") });
+            }}
           />
 
           {filtering ? (

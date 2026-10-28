@@ -13,6 +13,18 @@ import { KpiTiles } from "./kpi-tiles";
 import { FundingPanel } from "./funding-panel";
 import { PacingPanel } from "./pacing-panel";
 import { TrendChart, type TrendMetric } from "./trend-chart";
+import {
+  combineTotals,
+  matchesObjective,
+  matchesStatus,
+  objectiveOptions,
+  pacingSummaryFrom,
+  readObjective,
+  readStatus,
+  statusFilters,
+  sumDaily,
+  type StatusFilter,
+} from "./filters";
 import type { CampaignRow, DashboardPayload } from "./types";
 
 const RANGES = [7, 14, 30, 90];
@@ -37,6 +49,7 @@ export function DashboardView({ accountId }: { accountId: string }) {
   const days = Number(searchParams.get("days") ?? 7);
   const range = RANGES.includes(days) ? days : 7;
   const takeovers = searchParams.get("takeovers") === "1";
+  const status = readStatus(searchParams.get("status"));
 
   const [openCampaign, setOpenCampaign] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
@@ -96,6 +109,61 @@ export function DashboardView({ accountId }: { accountId: string }) {
     [router, searchParams],
   );
 
+  const setQuery = useCallback(
+    (changes: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(changes)) {
+        if (value === null) params.delete(key);
+        else params.set(key, value);
+      }
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
+
+  const objectives = useMemo(
+    () => (data ? objectiveOptions(data.campaigns) : []),
+    [data],
+  );
+  const objective = readObjective(searchParams.get("objective"), objectives);
+  const filtering = objective !== null || status !== "all";
+
+  /**
+   * Tiles, chart, and pacing follow the same campaigns as the table. The unfiltered page keeps
+   * the server totals: those were summed in micros, and adding the already-rounded campaign
+   * totals back up would drift by a few cents.
+   */
+  const view = useMemo(() => {
+    if (!data) return null;
+    if (!filtering) {
+      return {
+        campaigns: data.campaigns,
+        totals: data.totals,
+        spendSeries: data.spendSeries,
+        impressions: data.series.impressions ?? [],
+        engagements: data.series.engagements ?? [],
+        clicks: data.series.clicks ?? [],
+        videoViews: data.series.video_total_views ?? [],
+        pacing: data.pacing,
+      };
+    }
+
+    const campaigns = data.campaigns.filter(
+      (row) => matchesObjective(row, objective) && matchesStatus(row, status),
+    );
+    const length = data.range.dates.length;
+    return {
+      campaigns,
+      totals: combineTotals(campaigns),
+      spendSeries: sumDaily(campaigns, "spend", length),
+      impressions: sumDaily(campaigns, "impressions", length),
+      engagements: sumDaily(campaigns, "engagements", length),
+      clicks: sumDaily(campaigns, "clicks", length),
+      videoViews: sumDaily(campaigns, "videoViews", length),
+      pacing: pacingSummaryFrom(campaigns),
+    };
+  }, [data, filtering, objective, status]);
+
   const setTakeovers = useCallback(
     (next: boolean) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -111,36 +179,30 @@ export function DashboardView({ accountId }: { accountId: string }) {
       previous.includes(id) ? previous.filter((entry) => entry !== id) : [...previous, id],
     );
 
+  const visibleSelected = selected.filter((id) =>
+    view?.campaigns.some((campaign) => campaign.id === id),
+  );
+
   // The whole comparison lives in the URL, so a rep can paste it into a deal thread.
   const compareHref = `/accounts/${accountId}/compare?${new URLSearchParams({
     ...(asUser ? { asUser } : {}),
     ...(takeovers ? { takeovers: "1" } : {}),
     days: String(range),
-    ids: selected.join(","),
+    ids: visibleSelected.join(","),
   }).toString()}`;
 
-  const metrics: TrendMetric[] = data
+  const metrics: TrendMetric[] = view
     ? [
-        { key: "spend", label: "Spend", values: data.spendSeries, kind: "currency" },
-        {
-          key: "impressions",
-          label: "Impressions",
-          values: data.series.impressions ?? [],
-          kind: "count",
-        },
-        {
-          key: "engagements",
-          label: "Engagements",
-          values: data.series.engagements ?? [],
-          kind: "count",
-        },
-        { key: "clicks", label: "Clicks", values: data.series.clicks ?? [], kind: "count" },
-        ...(data.totals.videoViews > 0
+        { key: "spend", label: "Spend", values: view.spendSeries, kind: "currency" },
+        { key: "impressions", label: "Impressions", values: view.impressions, kind: "count" },
+        { key: "engagements", label: "Engagements", values: view.engagements, kind: "count" },
+        { key: "clicks", label: "Clicks", values: view.clicks, kind: "count" },
+        ...(view.totals.videoViews > 0
           ? [
               {
                 key: "video",
                 label: "Video views",
-                values: data.series.video_total_views ?? [],
+                values: view.videoViews,
                 kind: "count" as const,
               },
             ]
@@ -180,8 +242,45 @@ export function DashboardView({ accountId }: { accountId: string }) {
             ) : null}
           </div>
         </div>
+      </header>
 
-        <div className="flex rounded-full border border-border bg-surface p-1">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-xs font-semibold text-muted">
+            Objective
+            <select
+              value={objective ?? ""}
+              onChange={(event) =>
+                setQuery({ objective: event.target.value === "" ? null : event.target.value })
+              }
+              className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-ink"
+            >
+              <option value="">All</option>
+              {objectives.map((option) => (
+                <option key={option} value={option}>
+                  {titleCase(option)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div
+            className="flex rounded-full border border-border bg-surface p-1"
+            role="group"
+            aria-label="Campaign status"
+          >
+            {statusFilters().map((option) => (
+              <StatusButton
+                key={option}
+                option={option}
+                current={status}
+                onSelect={(next) => setQuery({ status: next === "all" ? null : next })}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="flex rounded-full border border-border bg-surface p-1" role="group" aria-label="Date range">
           {RANGES.map((option) => (
             <button
               key={option}
@@ -197,7 +296,7 @@ export function DashboardView({ accountId }: { accountId: string }) {
             </button>
           ))}
         </div>
-      </header>
+      </div>
 
       {isError ? (
         <div className="mt-6">
@@ -224,15 +323,22 @@ export function DashboardView({ accountId }: { accountId: string }) {
           ) : null}
 
           <KpiTiles
-            totals={data.totals}
+            totals={view?.totals ?? data.totals}
             previousTotals={data.previousTotals}
             currency={data.account.currency}
-            spendSeries={data.spendSeries}
+            spendSeries={view?.spendSeries ?? data.spendSeries}
             rangeDays={range}
-            comparable={baseline === null}
+            comparable={baseline === null && !filtering}
           />
 
-          {baseline ? (
+          {filtering ? (
+            <p className="text-xs text-muted">
+              Tiles, chart, pacing, and the campaign list follow these filters. The prior {range}{" "}
+              days stay hidden, because that comparison is only computed for the whole account.
+            </p>
+          ) : null}
+
+          {baseline && !filtering ? (
             <p className="text-xs text-muted">
               Nothing ran in the prior {range} days, so there is no period-over-period comparison.
               {baseline.startedOn
@@ -251,8 +357,8 @@ export function DashboardView({ accountId }: { accountId: string }) {
 
           {/* Ahead of the charts: this is the part with something to do about it. */}
           <PacingPanel
-            summary={data.pacing}
-            campaigns={data.campaigns}
+            summary={view?.pacing ?? data.pacing}
+            campaigns={view?.campaigns ?? data.campaigns}
             currency={data.account.currency}
           />
 
@@ -275,11 +381,12 @@ export function DashboardView({ accountId }: { accountId: string }) {
           />
 
           <CampaignTable
-            campaigns={data.campaigns}
+            campaigns={view?.campaigns ?? data.campaigns}
             currency={data.account.currency}
-            selected={selected}
+            selected={visibleSelected}
             onToggleSelect={toggleSelect}
             onOpen={setOpenCampaign}
+            scoped={filtering}
           />
 
           <TakeoverNotice
@@ -290,11 +397,11 @@ export function DashboardView({ accountId }: { accountId: string }) {
         </div>
       ) : null}
 
-      {selected.length >= 2 ? (
+      {visibleSelected.length >= 2 ? (
         <div className="pointer-events-none fixed bottom-6 left-1/2 z-40 -translate-x-1/2">
           <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-surface px-4 py-2.5 shadow-xl">
             <span className="text-xs text-muted">
-              {selected.length} campaigns selected
+              {visibleSelected.length} campaigns selected
             </span>
             <Button
               variant="secondary"
@@ -338,6 +445,35 @@ export function DashboardView({ accountId }: { accountId: string }) {
  * an auction rate do not belong in the same average. The spend is still named here rather than
  * silently dropped, since on one real account it was 89% of the quarter.
  */
+const STATUS_LABEL: Record<StatusFilter, string> = {
+  all: "All",
+  active: "Active",
+  paused: "Paused",
+};
+
+function StatusButton({
+  option,
+  current,
+  onSelect,
+}: {
+  option: StatusFilter;
+  current: StatusFilter;
+  onSelect: (next: StatusFilter) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(option)}
+      className={cx(
+        "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+        option === current ? "bg-accent text-white" : "text-muted hover:text-ink",
+      )}
+    >
+      {STATUS_LABEL[option]}
+    </button>
+  );
+}
+
 function TakeoverNotice({
   takeovers,
   currency,

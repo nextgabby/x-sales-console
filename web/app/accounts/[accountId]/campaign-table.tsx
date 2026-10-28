@@ -93,12 +93,15 @@ export function CampaignTable({
   selected,
   onToggleSelect,
   onOpen,
+  scoped = false,
 }: {
   campaigns: CampaignRow[];
   currency: string | null;
   selected: string[];
   onToggleSelect: (id: string) => void;
   onOpen: (id: string) => void;
+  /** The rows are a filtered subset, so they reconcile to the tiles above rather than the account. */
+  scoped?: boolean;
 }) {
   const [sortKey, setSortKey] = useState("spend");
   const [ascending, setAscending] = useState(false);
@@ -108,7 +111,9 @@ export function CampaignTable({
 
   const rows = useMemo(() => {
     const column = COLUMNS.find((entry) => entry.key === sortKey);
-    const visible = showDormant ? campaigns : campaigns.filter((row) => !isQuiet(row));
+    // A status or objective filter already chose these rows, including ones with no delivery.
+    // Hiding those again would make "Paused" look empty whenever the paused campaigns were quiet.
+    const visible = scoped || showDormant ? campaigns : campaigns.filter((row) => !isQuiet(row));
     if (!column) return visible;
     return [...visible].sort((a, b) => {
       const left = column.value(a);
@@ -128,7 +133,7 @@ export function CampaignTable({
       const diff = left - right;
       return ascending ? diff : -diff;
     });
-  }, [campaigns, sortKey, ascending, showDormant]);
+  }, [campaigns, sortKey, ascending, showDormant, scoped]);
 
   const toggleSort = (key: string) => {
     if (key === sortKey) {
@@ -149,7 +154,7 @@ export function CampaignTable({
             {selected.length > 0 ? ` · ${selected.length} selected to compare` : ""}
           </p>
         </div>
-        {dormantCount > 0 ? (
+        {dormantCount > 0 && !scoped ? (
           <button
             onClick={() => setShowDormant((previous) => !previous)}
             className="text-xs font-semibold text-muted transition-colors hover:text-ink"
@@ -241,7 +246,9 @@ export function CampaignTable({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={COLUMNS.length + 3} className="px-5 py-10 text-center text-muted">
-                  No campaigns with activity in this range.
+                  {campaigns.length === 0
+                    ? "No campaigns match these filters."
+                    : "No campaigns with activity in this range."}
                 </td>
               </tr>
             ) : null}
@@ -257,7 +264,7 @@ export function CampaignTable({
           {rows.some((row) => row.takeover)
             ? "Takeovers are flat-rate day buys, so their cost per impression reflects a negotiated price rather than the auction — read their reach and engagement, not their CPM. "
             : ""}
-          Rows add up to the account total.
+          {scoped ? "Rows add up to the filtered totals above." : "Rows add up to the account total."}
         </footer>
       ) : null}
     </section>

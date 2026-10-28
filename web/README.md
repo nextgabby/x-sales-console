@@ -493,9 +493,10 @@ because an insertion order has no line items, no daily budget and no delivery of
 **Filtering on `entity_status` would show exactly the wrong rows.** On one real account the source
 described as "(no payment method has been set up yet)" is `ACTIVE` with `able_to_fund: true` and
 nothing in it, while three insertion orders holding $928,000 between them are `PAUSED`. A status
-filter keeps the empty card and hides the money. `isLiveCommitment()` therefore tests funded and in
-flight instead — a funded amount above zero, with today inside the start and end dates — whatever
-the status says.
+filter keeps the empty card and hides the money. `isLiveCommitment()` is the fetch boundary instead — a funded amount above zero, with today
+inside the start and end dates — whatever the status says. The panel's default list is narrower:
+a live order is shown when it can still fund, or when it cannot fund but money is still unspent.
+A paused order already spent down, and everything outside the flight, stays behind "Show more."
 
 **A paused order reads as budget at risk, with the reason, not as behind pace.** "Behind" sends a
 rep to raise campaign budgets, which cannot work when the source is blocked from spending at all, so

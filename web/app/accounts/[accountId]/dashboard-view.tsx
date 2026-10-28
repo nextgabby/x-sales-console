@@ -287,8 +287,6 @@ export function DashboardView({ accountId }: { accountId: string }) {
             currency={data.account.currency}
             onChange={setTakeovers}
           />
-
-          <FundingSummary data={data} />
         </div>
       ) : null}
 
@@ -385,35 +383,3 @@ function TakeoverNotice({
   );
 }
 
-function FundingSummary({ data }: { data: DashboardPayload }) {
-  if (data.fundingInstruments.length === 0) return null;
-
-  return (
-    <section className="rounded-2xl border border-border bg-surface p-5">
-      <h2 className="text-sm font-semibold text-ink">Funding</h2>
-      <div className="mt-3 grid gap-2 md:grid-cols-2">
-        {data.fundingInstruments.map((instrument) => (
-          <div
-            key={instrument.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-border bg-canvas px-4 py-3"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm text-ink">
-                {instrument.description || instrument.id}
-              </p>
-              <p className="mt-0.5 text-[11px] text-muted">
-                {instrument.ableToFund ? "Able to fund" : "Not able to fund"}
-              </p>
-            </div>
-            <div className="nums shrink-0 text-right">
-              <div className="text-sm font-semibold text-ink">
-                {formatCurrency(instrument.fundedAmount ?? 0, instrument.currency)}
-              </div>
-              <div className="text-[11px] text-muted">funded</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}

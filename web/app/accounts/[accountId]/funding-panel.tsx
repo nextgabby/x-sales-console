@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import { Badge, Callout, cx } from "@/components/ui";
 import { formatCompactCurrency, formatCurrency } from "@/lib/format";
-import { isLiveCommitment, type FundingStatus } from "@/lib/x/funding";
+import { isShownByDefault, type FundingStatus } from "@/lib/x/funding";
 import type { FundingInstrumentRow } from "./types";
 
 const STATUS_LABEL: Record<FundingStatus, string> = {
@@ -54,28 +54,27 @@ export function FundingPanel({
 }) {
   const [showAll, setShowAll] = useState(false);
 
-  const { live, hidden } = useMemo(() => {
+  const { shownByDefault, hidden } = useMemo(() => {
     /**
-     * Funded and in flight, not `entity_status === "ACTIVE"`.
-     *
-     * Status is the wrong filter and a live account shows why: an instrument described as "(no
-     * payment method has been set up yet)" is ACTIVE and able to fund with nothing in it, while
-     * the orders holding the budget are PAUSED. Filtering on status keeps the empty one and hides
-     * the money.
+     * Not `entity_status === "ACTIVE"`. An empty card can be ACTIVE and able to fund with nothing
+     * in it, while the orders holding the budget are PAUSED. The default list is the orders that
+     * can still spend, plus paused ones that still hold money.
      */
-    const isLive = (row: FundingInstrumentRow) =>
-      isLiveCommitment({
+    const visible = (row: FundingInstrumentRow) =>
+      isShownByDefault({
         fundedAmount: row.fundedAmount,
         startTime: row.startTime,
         endTime: row.endTime,
+        ableToFund: row.ableToFund,
+        spendToDate: row.pacing ? row.pacing.spendToDate : null,
       });
     return {
-      live: instruments.filter(isLive),
-      hidden: instruments.filter((row) => !isLive(row)),
+      shownByDefault: instruments.filter(visible),
+      hidden: instruments.filter((row) => !visible(row)),
     };
   }, [instruments]);
 
-  const shown = showAll ? instruments : live;
+  const shown = showAll ? instruments : shownByDefault;
   const sorted = [...shown].sort((a, b) => {
     const rank = (row: FundingInstrumentRow) =>
       row.pacing ? ORDER.indexOf(row.pacing.status) : ORDER.length;
@@ -84,7 +83,7 @@ export function FundingPanel({
     return (b.pacing?.atRisk ?? 0) - (a.pacing?.atRisk ?? 0);
   });
 
-  const atRisk = live.reduce((total, row) => total + (row.pacing?.atRisk ?? 0), 0);
+  const atRisk = shownByDefault.reduce((total, row) => total + (row.pacing?.atRisk ?? 0), 0);
 
   if (instruments.length === 0) return null;
 
@@ -104,7 +103,7 @@ export function FundingPanel({
             onClick={() => setShowAll((previous) => !previous)}
             className="shrink-0 text-xs text-muted underline transition-colors hover:text-ink"
           >
-            {showAll ? `Hide ${hidden.length} not in flight` : `Show ${hidden.length} more`}
+            {showAll ? `Hide ${hidden.length} more` : `Show ${hidden.length} more`}
           </button>
         ) : null}
       </header>
@@ -113,17 +112,24 @@ export function FundingPanel({
         <div className="px-5 pt-4">
           <Callout tone="warn">
             {formatCurrency(atRisk, currency)} committed is projected to go unspent across{" "}
-            {live.filter((row) => (row.pacing?.atRisk ?? 0) > 0).length} of {live.length} funding
-            {live.length === 1 ? " source" : " sources"}.
+            {shownByDefault.filter((row) => (row.pacing?.atRisk ?? 0) > 0).length} of{" "}
+            {shownByDefault.length} funding
+            {shownByDefault.length === 1 ? " source" : " sources"}.
           </Callout>
         </div>
       ) : null}
 
-      <ul className="divide-y divide-border/60">
-        {sorted.map((row) => (
-          <InstrumentRow key={row.id} row={row} currency={currency} timeZone={timeZone} />
-        ))}
-      </ul>
+      {sorted.length === 0 ? (
+        <p className="px-5 py-4 text-xs text-muted">
+          No funding source can spend right now, and none still hold unspent budget.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border/60">
+          {sorted.map((row) => (
+            <InstrumentRow key={row.id} row={row} currency={currency} timeZone={timeZone} />
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

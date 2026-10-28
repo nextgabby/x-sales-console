@@ -92,6 +92,27 @@ export function isLiveCommitment(
   return true;
 }
 
+/**
+ * Whether the funding panel shows this source before "Show more".
+ *
+ * Funded and in flight is the fetch boundary, not the list a CAM should read. A paused order that
+ * has already been spent down is clutter: it cannot fund and nothing is left. A paused order that
+ * still holds money stays, because that leftover is the commitment. Spend that never loaded stays
+ * too — unknown is not the same as zero, and hiding it would drop an order we failed to measure.
+ */
+export function isShownByDefault(
+  input: Pick<FundingInput, "fundedAmount" | "startTime" | "endTime" | "ableToFund"> & {
+    spendToDate: number | null;
+  },
+  now = new Date(),
+): boolean {
+  if (!isLiveCommitment(input, now)) return false;
+  if (input.ableToFund) return true;
+  if (input.spendToDate == null) return true;
+  const funded = input.fundedAmount ?? 0;
+  return funded - input.spendToDate > 0;
+}
+
 export function computeFundingPacing(input: FundingInput, now = new Date()): FundingPacing | null {
   const funded = input.fundedAmount ?? 0;
   const spend = input.spendToDate ?? 0;

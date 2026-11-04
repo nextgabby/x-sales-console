@@ -135,6 +135,8 @@ export type DailyStatsResult = {
   totalRequests: number;
   /** True when the API rate-limited us, which is worth telling the rep to retry rather than refetch. */
   rateLimited: boolean;
+  /** The first request's error, so a refusal is not reported as a blank total. */
+  failure: string | null;
 };
 
 export async function fetchDailyStats(options: {
@@ -159,7 +161,7 @@ export async function fetchDailyStats(options: {
   for (const id of options.entityIds) result[id] = emptySeries(range.dates.length);
 
   if (options.entityIds.length === 0) {
-    return { series: result, failedRequests: 0, totalRequests: 0, rateLimited: false };
+    return { series: result, failedRequests: 0, totalRequests: 0, rateLimited: false, failure: null };
   }
 
   // Index lookup so a window's values land in the right columns of the full range.
@@ -174,6 +176,7 @@ export async function fetchDailyStats(options: {
 
   let failedRequests = 0;
   let rateLimited = false;
+  let failure: string | null = null;
 
   for (const { window, chunk } of requests) {
     /**
@@ -196,8 +199,15 @@ export async function fetchDailyStats(options: {
         query: {
           entity: options.entity,
           entity_ids: chunk.join(","),
-          start_time: window.startTime,
-          end_time: window.endTime,
+          /**
+           * The date alone, not a timestamp. DAY stats have to start and end at midnight in the
+           * account's timezone, and the offset in effect today is not midnight on the other side
+           * of a daylight-saving change. `2026-10-28T00:00:00-05:00` is 1am in New York on a day
+           * that was still UTC−4, and the API rejects the whole window. A bare date is defined as
+           * that midnight, so the server applies the offset the day actually had.
+           */
+          start_time: window.startTime.slice(0, 10),
+          end_time: window.endTime.slice(0, 10),
           granularity: "DAY",
           metric_groups: options.metricGroups,
           placement: options.placement ?? "ALL_ON_TWITTER",
@@ -207,6 +217,7 @@ export async function fetchDailyStats(options: {
       // A failed window leaves zeros for those days rather than losing the whole range, but it
       // is counted so the caller can say the totals are incomplete.
       if (error instanceof AdsApiError && error.status === 429) rateLimited = true;
+      failure ??= statsFailure(error);
       failedRequests += 1;
       continue;
     }
@@ -226,7 +237,15 @@ export async function fetchDailyStats(options: {
     }
   }
 
-  return { series: result, failedRequests, totalRequests: requests.length, rateLimited };
+  return { series: result, failedRequests, totalRequests: requests.length, rateLimited, failure };
+}
+
+function statsFailure(error: unknown): string {
+  if (error instanceof AdsApiError) {
+    const detail = error.message.replace(/^X Ads API returned \d+ for \S+: /, "");
+    return `X Ads API returned ${error.status}: ${detail}`.slice(0, 220);
+  }
+  return "the stats request did not complete";
 }
 
 export type Totals = {

@@ -398,8 +398,8 @@ async function fetchSpendSparkline(
         query: {
           entity: "CAMPAIGN",
           entity_ids: chunk.join(","),
-          start_time: range.startTime,
-          end_time: range.endTime,
+          start_time: range.startTime.slice(0, 10),
+          end_time: range.endTime.slice(0, 10),
           granularity: "DAY",
           metric_groups: "BILLING",
           placement: "ALL_ON_TWITTER",

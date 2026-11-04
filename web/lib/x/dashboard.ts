@@ -336,6 +336,7 @@ export async function buildDashboard(options: {
           failedRequests: 0,
           totalRequests: 0,
           rateLimited: false,
+          failure: null,
         })
       : fetchDailyStats({
           credentials,
@@ -362,8 +363,9 @@ export async function buildDashboard(options: {
       current.rateLimited || previous.rateLimited
         ? `The X Ads API is rate limiting this token, so ${failed} of ${total} stats requests were ` +
             `skipped and these totals are understated. Wait a minute and refresh.`
-        : `${failed} of ${total} stats requests failed, so these totals are understated. ` +
-            `Refresh to try again.`,
+        : `${failed} of ${total} stats requests failed${
+            current.failure ?? previous.failure ? ` (${current.failure ?? previous.failure})` : ""
+          }, so these totals are understated. Refresh to try again.`,
     );
   }
 
@@ -489,7 +491,9 @@ export async function buildDashboard(options: {
 
       if (instrumentStats.failedRequests > 0) {
         warnings.push(
-          "Funding source pacing is unavailable; insertion order spend history did not load.",
+          `Funding source pacing is unavailable; insertion order spend history did not load${
+          instrumentStats.failure ? ` (${instrumentStats.failure})` : ""
+        }.`,
         );
       } else {
         for (const [id, series] of Object.entries(instrumentStats.series)) {

@@ -1,12 +1,17 @@
 /**
- * The Ads API requires `start_time` and `end_time` to sit exactly on midnight in the ad
- * account's own timezone for DAY and TOTAL granularity, using the offset in effect today
- * rather than the offset on the day being queried. Getting this wrong does not error — it
- * silently shifts the reporting window — so all range building goes through here.
+ * DAY stats have to start and end at midnight in the ad account's own timezone. The offset in
+ * effect today is not that midnight once a daylight-saving change sits inside the range:
+ * `2026-10-28T00:00:00-05:00` is 1am in New York on a day that was still UTC−4, and the API
+ * rejects the window. Timestamps built here use the offset at local midnight on that date.
+ * Campaign stats send the date alone and let the API apply this; funding-instrument stats
+ * reject a bare date, so they send the timestamp.
  */
 
 /** The synchronous stats endpoint rejects any span longer than this. */
 export const MAX_SYNC_RANGE_DAYS = 7;
+
+/** Active-entity requests are rejected once the clock span exceeds 90 days. */
+export const MAX_ACTIVE_ENTITY_HOURS = 90 * 24;
 
 /**
  * Billing settles within about 3 days but can be revised for up to 14. Days inside this
@@ -14,12 +19,12 @@ export const MAX_SYNC_RANGE_DAYS = 7;
  */
 export const PROVISIONAL_SPEND_DAYS = 3;
 
-function currentUtcOffset(timeZone: string): string {
+function offsetAt(instant: Date, timeZone: string): string {
   try {
     const parts = new Intl.DateTimeFormat("en-US", {
       timeZone,
       timeZoneName: "longOffset",
-    }).formatToParts(new Date());
+    }).formatToParts(instant);
     const label = parts.find((part) => part.type === "timeZoneName")?.value ?? "";
     const match = /GMT([+-]\d{2}:\d{2})/.exec(label);
     if (match?.[1]) return match[1];
@@ -29,6 +34,27 @@ function currentUtcOffset(timeZone: string): string {
     // Unknown timezone string; fall through to UTC.
   }
   return "+00:00";
+}
+
+function currentUtcOffset(timeZone: string): string {
+  return offsetAt(new Date(), timeZone);
+}
+
+/**
+ * Offset in effect at local midnight on `date`.
+ *
+ * Noon is the wrong probe. On the morning the clocks fall back, noon is already standard time
+ * while midnight is still daylight time, so reading "now" or reading noon stamps that midnight
+ * an hour off. Start from noon, then re-read the offset at the midnight that guess implies.
+ */
+function offsetAtLocalMidnight(date: string, timeZone: string): string {
+  let offset = offsetAt(new Date(`${date}T12:00:00Z`), timeZone);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const refined = offsetAt(new Date(`${date}T00:00:00${offset}`), timeZone);
+    if (refined === offset) return offset;
+    offset = refined;
+  }
+  return offset;
 }
 
 /** Today's calendar date in the account's timezone, as YYYY-MM-DD. */
@@ -110,38 +136,89 @@ function recentDates(days: number, timeZone: string): string[] {
  * of campaigns and no job orchestration.
  */
 function toWindows(dates: string[], timeZone: string): StatsWindow[] {
-  const offset = currentUtcOffset(timeZone);
   const windows: StatsWindow[] = [];
 
   for (let index = 0; index < dates.length; index += MAX_SYNC_RANGE_DAYS) {
-    const slice = dates.slice(index, index + MAX_SYNC_RANGE_DAYS);
-    const first = slice[0]!;
-    const last = slice[slice.length - 1]!;
-
-    /**
-     * The window is bounded by the first and last dates, so a gap in between would ask for a span
-     * longer than the slice and the API would reject the whole window. Callers build contiguous
-     * ranges, so this firing means a date list was constructed wrongly — worth failing loudly,
-     * because the alternative is a silently short total.
-     */
-    if (dayDiff(first, last) + 1 !== slice.length) {
-      throw new Error(
-        `Reporting range is not contiguous: ${first}..${last} covers ${dayDiff(first, last) + 1} ` +
-          `days but holds ${slice.length} dates.`,
-      );
-    }
-    // end_time is exclusive, so it must be midnight of the day after the last one wanted.
-    const dayAfterLast = new Date(`${last}T00:00:00Z`);
-    dayAfterLast.setUTCDate(dayAfterLast.getUTCDate() + 1);
-
-    windows.push({
-      startTime: midnight(first, offset),
-      endTime: midnight(dayAfterLast.toISOString().slice(0, 10), offset),
-      dates: slice,
-    });
+    windows.push(...windowFor(dates.slice(index, index + MAX_SYNC_RANGE_DAYS), timeZone));
   }
 
   return windows;
+}
+
+/**
+ * One synchronous window, split when a daylight-saving change makes seven calendar days last
+ * 169 hours. The endpoint's cap is seven days, and a range an hour over it is rejected whole.
+ */
+function windowFor(slice: string[], timeZone: string): StatsWindow[] {
+  const first = slice[0]!;
+  const last = slice[slice.length - 1]!;
+
+  /**
+   * The window is bounded by the first and last dates, so a gap in between would ask for a span
+   * longer than the slice and the API would reject the whole window. Callers build contiguous
+   * ranges, so this firing means a date list was constructed wrongly — worth failing loudly,
+   * because the alternative is a silently short total.
+   */
+  if (dayDiff(first, last) + 1 !== slice.length) {
+    throw new Error(
+      `Reporting range is not contiguous: ${first}..${last} covers ${dayDiff(first, last) + 1} ` +
+        `days but holds ${slice.length} dates.`,
+    );
+  }
+
+  // end_time is exclusive, so it must be midnight of the day after the last one wanted.
+  const endDate = shiftDate(last, 1);
+  const startTime = midnight(first, offsetAtLocalMidnight(first, timeZone));
+  const endTime = midnight(endDate, offsetAtLocalMidnight(endDate, timeZone));
+  const hours = (Date.parse(endTime) - Date.parse(startTime)) / 3_600_000;
+
+  if (hours > MAX_SYNC_RANGE_DAYS * 24 && slice.length > 1) {
+    const mid = Math.floor(slice.length / 2);
+    return [
+      ...windowFor(slice.slice(0, mid), timeZone),
+      ...windowFor(slice.slice(mid), timeZone),
+    ];
+  }
+
+  return [{ startTime, endTime, dates: slice }];
+}
+
+/**
+ * Groups windows so each span stays inside `maxHours` of clock time.
+ *
+ * Ninety calendar days that include the autumn clock change last ninety days and one hour.
+ * Active entities reject that as over the 90-day cap, which would drop the list of campaigns
+ * that actually spent. Sync windows are already at most seven days, so the split always lands
+ * on a boundary between them.
+ */
+export function spansWithin(
+  windows: StatsWindow[],
+  maxHours: number,
+): Array<{ startTime: string; endTime: string }> {
+  const spans: Array<{ startTime: string; endTime: string }> = [];
+  let groupStart: StatsWindow | null = null;
+  let groupEnd: StatsWindow | null = null;
+
+  for (const window of windows) {
+    if (!groupStart || !groupEnd) {
+      groupStart = window;
+      groupEnd = window;
+      continue;
+    }
+    const hours = (Date.parse(window.endTime) - Date.parse(groupStart.startTime)) / 3_600_000;
+    if (hours > maxHours) {
+      spans.push({ startTime: groupStart.startTime, endTime: groupEnd.endTime });
+      groupStart = window;
+      groupEnd = window;
+      continue;
+    }
+    groupEnd = window;
+  }
+
+  if (groupStart && groupEnd) {
+    spans.push({ startTime: groupStart.startTime, endTime: groupEnd.endTime });
+  }
+  return spans;
 }
 
 export function buildRange(days: number, timeZone: string): DateRange {

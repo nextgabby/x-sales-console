@@ -200,14 +200,20 @@ export async function fetchDailyStats(options: {
           entity: options.entity,
           entity_ids: chunk.join(","),
           /**
-           * The date alone, not a timestamp. DAY stats have to start and end at midnight in the
-           * account's timezone, and the offset in effect today is not midnight on the other side
-           * of a daylight-saving change. `2026-10-28T00:00:00-05:00` is 1am in New York on a day
-           * that was still UTC−4, and the API rejects the whole window. A bare date is defined as
-           * that midnight, so the server applies the offset the day actually had.
+           * Campaign, line item, and promoted-post stats accept a bare date, which the API reads
+           * as midnight in the account timezone. Funding-instrument stats reject that — the 400
+           * is `Expected time, got "2026-10-28"` — so those send the timestamp. The timestamp is
+           * already local midnight with the offset that date had; today's offset is an hour off
+           * on the other side of a daylight-saving change and the same call rejects it.
            */
-          start_time: window.startTime.slice(0, 10),
-          end_time: window.endTime.slice(0, 10),
+          start_time:
+            options.entity === "FUNDING_INSTRUMENT"
+              ? window.startTime
+              : window.startTime.slice(0, 10),
+          end_time:
+            options.entity === "FUNDING_INSTRUMENT"
+              ? window.endTime
+              : window.endTime.slice(0, 10),
           granularity: "DAY",
           metric_groups: options.metricGroups,
           placement: options.placement ?? "ALL_ON_TWITTER",

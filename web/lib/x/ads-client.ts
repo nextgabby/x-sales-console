@@ -65,11 +65,27 @@ function errorCodes(body: unknown): string[] {
 
 function describe(body: unknown): string {
   if (typeof body === "string") return body.slice(0, 400);
-  const errors = (body as { errors?: Array<{ message?: string; code?: string }> })?.errors;
+  const errors = (body as { errors?: Array<Record<string, unknown>> })?.errors;
   if (Array.isArray(errors) && errors.length > 0) {
-    return errors.map((e) => e.message || e.code).filter(Boolean).join("; ");
+    return errors.map((error) => describeError(error)).filter(Boolean).join("; ");
   }
   return JSON.stringify(body)?.slice(0, 400) ?? "no body";
+}
+
+/**
+ * The Ads API sometimes returns the format string (`Expected %s, got "%s" for %s`) and puts the
+ * real type, value, and parameter on sibling fields. Keep those, or the warning cannot say what
+ * was rejected.
+ */
+function describeError(error: Record<string, unknown>): string {
+  const message = typeof error.message === "string" ? error.message : "";
+  const extras = Object.entries(error)
+    .filter(
+      ([key, value]) =>
+        key !== "message" && (typeof value === "string" || typeof value === "number"),
+    )
+    .map(([key, value]) => `${key}=${value}`);
+  return [message, ...extras].filter(Boolean).join(", ").slice(0, 300);
 }
 
 function buildUrl(path: string, query?: Record<string, QueryValue>): string {

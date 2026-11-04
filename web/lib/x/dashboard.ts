@@ -19,8 +19,11 @@ import {
   buildRangeBetween,
   dayDiff,
   localDate,
+  MAX_ACTIVE_ENTITY_HOURS,
   microsToCurrency,
   provisionalDayCount,
+  spansWithin,
+  type DateRange,
 } from "./time";
 import {
   computePacing,
@@ -59,6 +62,44 @@ type LineItem = LineItemBudget & { id: string; objective?: string | null };
 const MAX_FLIGHT_LOOKBACK_DAYS = 92;
 
 export class AccountNotFoundError extends Error {}
+
+/**
+ * Campaigns that spent in `range`. One request when the span fits; two when a clock change
+ * pushes ninety calendar days an hour past the active-entity cap. A failed piece returns null
+ * rather than a partial set, because a missing id is spend that quietly disappears.
+ */
+async function loadActiveCampaignIds(options: {
+  credentials: XCredentials;
+  accountId: string;
+  asUser: string | null;
+  audit: { actor: Actor; accountId: string };
+  range: DateRange;
+}): Promise<Set<string> | null> {
+  const spans = spansWithin(options.range.windows, MAX_ACTIVE_ENTITY_HOURS);
+  const parts = await Promise.all(
+    spans.map((span) =>
+      adsRequest<{ data?: ActiveEntity[] }>({
+        path: `/stats/accounts/${options.accountId}/active_entities`,
+        credentials: options.credentials,
+        asUser: options.asUser,
+        audit: options.audit,
+        query: {
+          entity: "CAMPAIGN",
+          start_time: span.startTime,
+          end_time: span.endTime,
+        },
+      })
+        .then((active) => (active.data ?? []).map((entry) => entry.entity_id))
+        .catch(() => null),
+    ),
+  );
+  const found: string[][] = [];
+  for (const ids of parts) {
+    if (ids == null) return null;
+    found.push(ids);
+  }
+  return new Set(found.flat());
+}
 
 /**
  * A takeover has no name in the API, and "Takeover p7m8v" tells a rep nothing. These run as
@@ -168,19 +209,7 @@ export async function buildDashboard(options: {
       warnings.push("Funding details unavailable.");
       return [] as FundingInstrument[];
     }),
-    adsRequest<{ data?: ActiveEntity[] }>({
-      path: `/stats/accounts/${accountId}/active_entities`,
-      credentials,
-      asUser,
-      audit,
-      query: {
-        entity: "CAMPAIGN",
-        start_time: range.windows[0]!.startTime,
-        end_time: range.windows[range.windows.length - 1]!.endTime,
-      },
-    })
-      .then((active) => new Set((active.data ?? []).map((entry) => entry.entity_id)))
-      .catch(() => null),
+    loadActiveCampaignIds({ credentials, accountId, asUser, audit, range }),
     /**
      * The prior window needs its own active-entity list. Reusing the current window's would ask
      * for stats only on campaigns that spent *now*, so a flight that ended just before the window
@@ -189,19 +218,13 @@ export async function buildDashboard(options: {
      */
     skipComparisons
       ? Promise.resolve(null)
-      : adsRequest<{ data?: ActiveEntity[] }>({
-          path: `/stats/accounts/${accountId}/active_entities`,
+      : loadActiveCampaignIds({
           credentials,
+          accountId,
           asUser,
           audit,
-          query: {
-            entity: "CAMPAIGN",
-            start_time: previousRange.windows[0]!.startTime,
-            end_time: previousRange.windows[previousRange.windows.length - 1]!.endTime,
-          },
-        })
-          .then((active) => new Set((active.data ?? []).map((entry) => entry.entity_id)))
-          .catch(() => null),
+          range: previousRange,
+        }),
     /**
      * How the team has labelled this advertiser's campaigns. A local read or one small query, run
      * alongside the API calls rather than after them, and failing soft: an unreachable label store
